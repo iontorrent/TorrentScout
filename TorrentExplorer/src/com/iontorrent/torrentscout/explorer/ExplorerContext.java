@@ -16,23 +16,27 @@
  */
 package com.iontorrent.torrentscout.explorer;
 
+import com.iontorrent.expmodel.CompositeExperiment;
+import com.iontorrent.expmodel.DatBlock;
+import com.iontorrent.guiutils.widgets.Widget;
 import com.iontorrent.expmodel.ExperimentContext;
+import com.iontorrent.expmodel.GlobalContext;
 import com.iontorrent.guiutils.GuiUtils;
+import com.iontorrent.guiutils.widgets.CoordWidget;
 import com.iontorrent.rawdataaccess.pgmacquisition.DataAccessManager;
 import com.iontorrent.rawdataaccess.pgmacquisition.RawType;
 import com.iontorrent.rawdataaccess.wells.BfMask;
 import com.iontorrent.rawdataaccess.wells.BfMaskFlag;
 import com.iontorrent.rawdataaccess.wells.BitMask;
+import com.iontorrent.torrentscout.explorer.fit.AbstractHistoFunction;
 import com.iontorrent.utils.ErrorHandler;
 import com.iontorrent.utils.LookupUtils;
-import com.iontorrent.utils.ToolBox;
 import com.iontorrent.wellmodel.RasterData;
+import com.iontorrent.wellmodel.WellContext;
 import com.iontorrent.wellmodel.WellCoordinate;
 import com.iontorrent.wellmodel.WellSelection;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
@@ -52,6 +56,7 @@ import javax.swing.JOptionPane;
 import org.openide.util.Lookup;
 import org.openide.util.LookupEvent;
 import org.openide.util.LookupListener;
+import org.openide.util.lookup.InstanceContent;
 import org.openide.windows.WindowManager;
 
 /**
@@ -81,17 +86,25 @@ public class ExplorerContext implements Serializable {
     private int mainframe;
     private int cropleft = -1;
     private int cropright = -1;
+    private AbstractHistoFunction histofunction;
     private boolean maskOrOtherDataChanged;
-    
     private transient final Lookup.Result<WellSelection> selectionSelection =
             LookupUtils.getSubscriber(WellSelection.class, new WellSelectionListener());
     private transient final Lookup.Result<ExperimentContext> expContextResults =
             LookupUtils.getSubscriber(ExperimentContext.class, new ExpSubscriberListener());
+    private transient final Lookup.Result<CompositeExperiment> compContextResults =
+            LookupUtils.getSubscriber(CompositeExperiment.class, new CompSubscriberListener());
+    private transient final InstanceContent wellCoordContent = LookupUtils.getPublisher(WellCoordinate.class);
+    private transient final InstanceContent expContent = LookupUtils.getPublisher(ExperimentContext.class);
     private int span;
+    private transient CompositeExperiment compexp;
     private String medianfunction;
 
     public String storeContext(String file) {
 
+        p("=============== STORING CONTEXT ==============");
+        p("Exp is:" + exp);
+        p("Cols, rows=" + exp.getNrcols() + "/" + exp.getNrrows());
         try {
             OutputStream fout = new FileOutputStream(file);
             OutputStream buffer = new BufferedOutputStream(fout);
@@ -122,11 +135,43 @@ public class ExplorerContext implements Serializable {
         this.maskOrOtherDataChanged = maskOrOtherDataChanged;
     }
 
+    public void setHistoFunction(AbstractHistoFunction fun) {
+        this.histofunction = fun;
+    }
+    public AbstractHistoFunction getHistoFunction() {
+        return histofunction;
+    }
     private class ExpSubscriberListener implements LookupListener {
 
         @Override
         public void resultChanged(LookupEvent ev) {
             getLatestExperimentContext();
+        }
+    }
+
+    private class CompSubscriberListener implements LookupListener {
+
+        @Override
+        public void resultChanged(LookupEvent ev) {
+            getLatestCompExp();
+        }
+    }
+
+    protected void getLatestCompExp() {
+        final Collection<? extends CompositeExperiment> items = compContextResults.allInstances();
+        if (!items.isEmpty()) {
+            CompositeExperiment data = null;
+            Iterator<CompositeExperiment> it = (Iterator<CompositeExperiment>) items.iterator();
+            while (it.hasNext()) {
+                data = it.next();
+            }
+            if (data != null) {
+                compexp = data;
+                context.clear();
+            }
+
+        } else {
+            //  p("No exp context in list");
         }
     }
 
@@ -150,6 +195,7 @@ public class ExplorerContext implements Serializable {
 
     public String loadContext(String file) {
         ExplorerContext loaded = null;
+        p(" ============ LOADING CONTEXT ============");
         try {
             InputStream fout = new FileInputStream(file);
             InputStream buffer = new BufferedInputStream(fout);
@@ -165,11 +211,49 @@ public class ExplorerContext implements Serializable {
         }
         // else copy objects over
         // check experiment compatibility
-        if (!exp.getRawDir().equalsIgnoreCase(loaded.exp.getRawDir())) {
-            return "Experiments are not compatible - this data is from experiment :" + loaded.exp.getRawDir();
+
+        p("Loaded Exp is:" + loaded.exp);
+        p("exp is: " + exp);
+
+        WellCoordinate abs = loaded.exp.getWellContext().getAbsoluteCoordinate();
+        p("Got abs coord: " + abs + " from loaded contex");
+        p("Abs data area coord from loadec ontext: " + absdataAreaCoord);
+        if (exp.getColOffset() != loaded.exp.getColOffset() || exp.getRowOffset() != loaded.exp.getRowOffset()) {
+            GuiUtils.showNonModalMsg("Trying to pick right block for these masks at " + abs);
+
+            if (compexp == null) {
+                getLatestCompExp();
+            }
+            if (compexp != null) {
+                DatBlock b = compexp.findBlock(abs);
+                if (b == null) {
+                    GuiUtils.showNonModalDialog("Please pick the right block - I was not able to find the block for " + abs + "<br>:"
+                            + loaded.exp.getRawDir(), "Different block");
+                    return null;
+                } else {
+                    exp = compexp.getContext(b, false);
+                    // publishing exp context
+                    GuiUtils.showNonModalDialog("Selecting block " + b, "Publishing Experiment Context");
+                    p("PUBLISHING EXP:"+exp);
+                    GlobalContext.getContext().setExperimentContext(exp, false);
+                    LookupUtils.publish(expContent, exp);
+                }
+            }
+            if (exp.getColOffset() != loaded.exp.getColOffset() || exp.getRowOffset() != loaded.exp.getRowOffset()) {
+                GuiUtils.showNonModalDialog("Please pick the right block first for " + abs + "<br>:" + loaded.exp.getRawDir(), "Different block");
+                return null;
+            }
+        } else {
+            p("Same offset");
+        }
+        if (exp.getNrcols() != loaded.exp.getNrcols() || exp.getNrrows() != loaded.exp.getNrrows()) {
+            GuiUtils.showNonModalDialog("Experiments may not compatible - this data is from experiment or block<br>"
+                    + "Nr rows/cols=" + exp.getNrrows() + "/" + exp.getNrcols() + " vs " + loaded.exp.getNrrows() + "/" + loaded.exp.getNrcols() + "<br>Raw dir="
+                    + loaded.exp.getRawDir(), "Maybe not compatible");
+            //return null;
         }
 
-
+        exp.getWellContext().setAbsCoordinate(abs);
         data = null;
         dataChanged(null);
 
@@ -179,7 +263,7 @@ public class ExplorerContext implements Serializable {
         exp.setCacheDir(loaded.exp.getCacheDir());
 
         this.absdataAreaCoord = loaded.absdataAreaCoord;
-        exp.getWellContext().setCoordinate(absdataAreaCoord);
+        exp.getWellContext().setAbsCoordinate(absdataAreaCoord);
         this.dataAreaCoordChanged(absdataAreaCoord);
 
         this.frame = loaded.frame;
@@ -233,7 +317,7 @@ public class ExplorerContext implements Serializable {
             if (!context.exp.getResultsDirectory().equals(exp.getResultsDirectory())
                     || !context.exp.getRawDir().equals(exp.getRawDir())) {
                 // new context
-                p("Got new context: " + exp.getResultsDirectory());
+                p("+++++++++++++++++ Got new context: " + exp.getResultsDirectory());
                 context.exp = exp;
                 context.clear();
 
@@ -260,20 +344,20 @@ public class ExplorerContext implements Serializable {
      * @param signalMask the signalMask to set
      */
     public void setSignalMask(BitMask signalMask) {
-        p("Set signal mask: " + signalMask);
+        // p("Set signal mask: " + signalMask);
         //   Exception e = new Exception("tracking mask selection");
         //   p(ErrorHandler.getString(e));
         this.signalMask = signalMask;
     }
 
     public void setHistoMask(BitMask histoMask) {
-        p("Set histo mask: " + histoMask);
+        //   p("Set histo mask: " + histoMask);
         //   Exception e = new Exception("tracking mask selection");
         //   p(ErrorHandler.getString(e));
         this.histoMask = histoMask;
     }
 
-    void setIgnoreMask(BitMask mask) {
+    public void setIgnoreMask(BitMask mask) {
         this.ignoreMask = mask;
     }
 
@@ -309,7 +393,7 @@ public class ExplorerContext implements Serializable {
         }
         return preferrednrwidgets;
     }
-    
+
     public void setMedianFunction(String s) {
         this.medianfunction = s;
     }
@@ -337,23 +421,24 @@ public class ExplorerContext implements Serializable {
             }
             p("Got a well selection (probably frome some heat map): " + selection);
             getExp().getWellContext().setSelection(selection);
-            getExp().getWellContext().setCoordinate(selection.getCoord1());
 
-            if (this.getAbsDataAreaCoord() != null ) {                
-                if (this.maskOrOtherDataChanged) {
-                    int ans = JOptionPane.showConfirmDialog( WindowManager.getDefault().getMainWindow(), "<html>Would you like to use <b>" + getExp().getWellContext().getAbsoluteCoordinate() + "</b> and reload all data<br>"
+            WellCoordinate middle = selection.getMiddle();
+            getExp().getWellContext().setCoordinate(middle);
+
+            if (this.getAbsDataAreaCoord() != null) {
+                //if (this.maskOrOtherDataChanged) {
+                    int ans = JOptionPane.showConfirmDialog(WindowManager.getDefault().getMainWindow(), "<html>Would you like to use <b>" + getExp().getWellContext().getAbsoluteCoordinate() + "</b> and reload all data<br>"
                             + "Note: you will <b><font color='990000'>lose all masks</font>!</b></html>", "New Coordinate", JOptionPane.OK_CANCEL_OPTION);
                     if (ans == JOptionPane.OK_OPTION) {
 
                         setAbsDataAreaCoord(getExp().getWellContext().getAbsoluteCoordinate());
-                        p("Setting ABSOLUTE coords to " + this.getAbsDataAreaCoord());
-                    } else {
-                        getExp().getWellContext().setCoordinate(this.getAbsDataAreaCoord());
+                        p("Setting ABSOLUTE coords to middle of selection " + this.getAbsDataAreaCoord());
                     }
-                }
-                else setAbsDataAreaCoord(getExp().getWellContext().getAbsoluteCoordinate());
+//                } else {
+//                    setAbsDataAreaCoord(getExp().getWellContext().getAbsoluteCoordinate());
+//                }
             }
-            
+
             maskOrOtherDataChanged = false;
             //   p("SubscriberListener Got WellSelection:" + cur_context);
             // rasterViewUpdate(true);
@@ -363,7 +448,7 @@ public class ExplorerContext implements Serializable {
 
     public ExplorerContext(ExperimentContext exp) {
         this.exp = exp;
-        this.absdataAreaCoord = exp.getWellContext().getCoordinate();
+        this.absdataAreaCoord = exp.getWellContext().getAbsoluteCoordinate();
         list = new Vector<ContextChangedListener>();
     }
 
@@ -399,7 +484,7 @@ public class ExplorerContext implements Serializable {
     }
 
     private static void p(String msg) {
-        //System.out.println("ExplorerContext: " + msg);
+        System.out.println("ExplorerContext: " + msg);
         Logger.getLogger(ExplorerContext.class.getName()).log(Level.INFO, msg);
     }
 
@@ -476,8 +561,26 @@ public class ExplorerContext implements Serializable {
         }
 
     }
+ 
+    protected void publishCoord(WellCoordinate coord) {
+        if (coord != null) {
+         //   p("Got a coordinate: " + coord+", but will NOT publish it");
+            WellContext wellcontext = this.getExp().getWellContext();
+            if (wellcontext != null) {
+                if (wellcontext.getCoordinate() != null) {
+                    wellCoordContent.remove(wellcontext.getSelection());
+                }
+                wellcontext.setCoordinate(coord);
+            }
+            LookupUtils.publish(wellCoordContent, coord);
 
+        }
+    }
     public void widgetChanged(Widget w) {
+        if (w.isMainWidget()) {
+            CoordWidget cw = (CoordWidget)w;
+            publishCoord(cw.getAbsoluteCoord());
+        }
         Vector<ContextChangedListener> li = (Vector<ContextChangedListener>) list.clone();
         for (ContextChangedListener l : li) {
             l.widgetChanged(w);
@@ -516,6 +619,7 @@ public class ExplorerContext implements Serializable {
 
     public void masAdded(BitMask w) {
         Vector<ContextChangedListener> li = (Vector<ContextChangedListener>) list.clone();
+        p("masAdded: Got "+li.size()+" listeners for addmask");
         for (ContextChangedListener l : li) {
             l.maskAdded(w);
         }
@@ -565,12 +669,54 @@ public class ExplorerContext implements Serializable {
         }
     }
 
+     public boolean snapWidgetToMask(CoordWidget w, BitMask mask) {
+        WellCoordinate c = w.getAbsoluteCoord();
+        int offx = exp.getColOffset();
+        int offy = exp.getRowOffset();
+        int x = c.getX() - offx - data.getRelStartcoord().getCol();
+        int y = c.getY() - offy - data.getRelStartcoord().getRow();
+        int size = data.getRaster_size();
+        for (int j = 0; j < size; j++) {
+            for (int i = 0; i < size; i++) {
+                x++;
+                if (x >= size) {
+                    x = 0;
+                    y++;
+                    if (y >= size) {
+                        y = 0;
+                    }
+                }
+                if (mask.get(x, y)) {
+                    c = new WellCoordinate(x + offx + data.getRelStartcoord().getCol(), y + offy + data.getRelStartcoord().getRow());
+                    // p("Moving main widget to " + c);
+                    w.setAbsoluteCoords(c);
+                    coordChanged(c);
+                  //  Point imagep = getMiddleImageCoord(c);
+                  //  w.setX(imagep.x);
+                 //   w.setY(imagep.y);
+                    if (w.isMainWidget()) {
+                        publishCoord(c);
+                    }
+                  //  repaint();
+                    return true;
+                }
+            }
+            y++;
+            if (y >= size) {
+                y = 0;
+            }
+        }
+        return false;
+    }
     /**
      * @return the widgets
      */
     public ArrayList<Widget> getWidgets() {
         if (widgets == null) {
             widgets = new ArrayList<Widget>();
+        }
+        if (widgets.size() <1) {
+            p("XXXXXXXXXXX getWidgets: NO WIDGETS");
         }
         return widgets;
     }
@@ -602,24 +748,30 @@ public class ExplorerContext implements Serializable {
 
         if (exists) {
             msg += "I got no data for flow " + flow + ", " + getFiletype() + " in <b>" + getExp().getRawDir() + "</b> at " + getAbsDataAreaCoord() + "<br>";
-            msg += "The file exists, but maybe the coordinates " + abs + " are out of bounds?<br>(Relative to block: " + rel + ")";
+            msg += "The file exists, but maybe the absolute data area coordinates " + abs
+                    + " are out of bounds?<br>(Relative to block, the coords are: " + rel
+                    + ", offsets=" + exp.getColOffset() + "/" + exp.getRowOffset() + ", selected coord=" + exp.getWellContext().getCoordinate() + ")";
+            if (!exp.isBlock()) {
+                msg += "<br>The experiment is NOT a block";
+            }
+
         } else {
             // Exception e = new Exception("Tracing");
             //  p(ErrorHandler.getString(e));
             if (getExp().isChipBB()) {
                 if (!getExp().isBlock()) {
 
-                    msg += "<br>For BB experiments,  pick a block:";
+                    msg += "<br>For Proton experiments,  pick a block:";
                     msg += "<ul>";
-                    msg += "<li>by <b>clicking</b> on a block in the <b>Composite Experiment (BB) Component</b><br>(after the image has been computed, which can take 2-3 minutes the first time this experiment is viewed)</li>";
-                    msg += "<li>or by selecting a block in the <b>dropdown</b> in the <b>Composite Experiment (BB) Component</b>"
+                    msg += "<li>by <b>clicking</b> on a block in the <b>Proton Block Component</b><br>(after the image has been computed, which can take 2-3 minutes the first time this experiment is viewed)</li>";
+                    msg += "<li>or by selecting a block in the <b>dropdown</b> in the <b>Proton Block Component</b>"
                             + "<br>(can be done before composite image is computed)</li>";
-                    msg += "<li>or by selecting/entering the block folder directly in the <b>Offline Component</b> <br>"
+                    msg += "<li>or by selecting/entering the block folder directly in the <b>Open Experiment Component</b> <br>"
                             + "(quickest because it bypasses the composite image creation of all blocks)</li>";
                     msg += "</ul>";
                 } else {
                     msg += "I got no data for flow " + flow + ", " + getFiletype() + " in <b>" + getExp().getRawDir() + "</b> at " + getAbsDataAreaCoord() + "<br>";
-                    msg += "(And it looks like a BLOCK of a BB experiment to me)<br>";
+                    msg += "(And it looks like a BLOCK of a Proton experiment to me)<br>";
                     msg += "The block may not contain all data!<br>";
                     msg += "You might want to check the folder: " + getExp().getRawDir();
                     msg += "<br>(You could try to pick the folder yourself via <b>Offline Component</b>)";
@@ -627,14 +779,14 @@ public class ExplorerContext implements Serializable {
                 }
             } else {
                 msg += "I got no data for flow " + flow + ", " + getFiletype() + " in <b>" + getExp().getRawDir() + "</b> at " + getAbsDataAreaCoord() + "<br>";
-                msg += "(And it does not look like a BB experiment to me)<br>";
+                msg += "(And it does not look like a Proton experiment to me)<br>";
                 msg += "<b><font color='990000'>I did not find the file for flow " + flow + ", " + getFiletype() + "</font></b>";
                 msg += "<br>You might want to check your path, or use the <b>Offline Component</b> to select the folder with the raw files<br>";
             }
 
         }
         msg += "</html>";
-        GuiUtils.showNonModalDialog(msg, "Information");
+        GuiUtils.showNonModalDialog(msg, "ExplorerContext");
         //JOptionPane.showMessageDialog(null, msg);
     }
 
@@ -647,7 +799,9 @@ public class ExplorerContext implements Serializable {
             if (exp != null && exp.getWellContext() != null) {
                 p("data area coordinate is null... using value from well context");
                 absdataAreaCoord = exp.getWellContext().getAbsoluteCoordinate();
-
+                exp.makeAbsolute(absdataAreaCoord);
+            } else {
+                p("Got no exp or no wellcontext: " + exp);
             }
         }
         return absdataAreaCoord;
@@ -658,7 +812,8 @@ public class ExplorerContext implements Serializable {
         if (coord == null || exp == null) {
             return null;
         }
-        WellCoordinate rel = new WellCoordinate(coord.getCol() - getExp().getColOffset(), coord.getRow() - getExp().getRowOffset());
+        WellCoordinate rel = new WellCoordinate(coord.getCol(), coord.getRow());
+        exp.makeRelative(rel);
         return rel;
     }
 
@@ -666,14 +821,14 @@ public class ExplorerContext implements Serializable {
      * @param maincoord the maincoord to set
      */
     public void setAbsDataAreaCoord(WellCoordinate abscoord) {
-        if (abscoord != this.absdataAreaCoord) {
+        if (abscoord == null || absdataAreaCoord == null ||  !abscoord.equals(this.absdataAreaCoord)) {
             this.absdataAreaCoord = abscoord;
-            exp.getWellContext().setCoordinate(abscoord);
-            p("SENDING DATA AREA COORD CHANGED EVENT");
+            exp.getWellContext().setAbsCoordinate(abscoord);
+            p("COORDS NOT SAME:"+abscoord+": SENDING DATA AREA COORD CHANGED EVENT: " + abscoord);
             this.dataAreaCoordChanged(abscoord);
             // also send event using lookup?
 
-            this.createMasks();
+            //this.createMasks();
         }
 
     }
@@ -682,7 +837,8 @@ public class ExplorerContext implements Serializable {
         if (exp == null || rel == null) {
             return;
         }
-        WellCoordinate abs = new WellCoordinate(rel.getX() + exp.getColOffset(), rel.getY() + exp.getRowOffset());
+        WellCoordinate abs = new WellCoordinate(rel.getCol(), rel.getRow());
+        exp.makeAbsolute(abs);
         setAbsDataAreaCoord(abs);
     }
 
@@ -731,9 +887,23 @@ public class ExplorerContext implements Serializable {
      * @param data the data to set
      */
     public synchronized void setData(RasterData d) {
+
+        if (d == null) return;
         if (d != this.data) {
+            WellCoordinate oldc = null;
+            WellCoordinate newc = d.getRelStartcoord();
+            if (this.data != null) {
+                oldc = data.getRelStartcoord();
+            }
             this.data = d;
+            // only remove widgets if they are in a different area!
+            if (oldc != null && !oldc.equals(newc)) {
+                p("setData: different coord: Removing all widgets and recreating masks ");
+                this.getWidgets().clear();
+                this.createMasks();
+            }
             this.dataChanged(d);
+           
         }
 
     }
@@ -791,7 +961,6 @@ public class ExplorerContext implements Serializable {
         this.endframe = endframe;
     }
 
-   
     /**
      * @return the cropleft
      */
@@ -833,7 +1002,7 @@ public class ExplorerContext implements Serializable {
     }
 
     public void createMasks() {
-
+        p("======= create masks======= ");
         maskOrOtherDataChanged = false;
         this.ignoreMask = null;
         this.bgMask = null;
@@ -860,7 +1029,7 @@ public class ExplorerContext implements Serializable {
         this.masks = new ArrayList<BitMask>();
         BfMask bfmask = this.exp.getWellContext().getMask();
         WellCoordinate relcoord = new WellCoordinate(x0, y0);
-        p("Createing all new masks at REL " + relcoord);
+        p("Createing all new masks at REL " + relcoord + "/ abs=" + exp.getAbsolute(relcoord));
         if (bfmask != null) {
             p("creating masks based on bfmask at " + relcoord);
             masks = bfmask.createMasks(x0, y0, dx, dx);

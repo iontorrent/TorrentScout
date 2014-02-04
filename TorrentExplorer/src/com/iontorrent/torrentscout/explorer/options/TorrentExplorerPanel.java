@@ -45,6 +45,7 @@ public final class TorrentExplorerPanel extends javax.swing.JPanel {
         jPanel1 = new javax.swing.JPanel();
         jLabel1 = new javax.swing.JLabel();
         txtSpan = new javax.swing.JTextField();
+        automatic = new javax.swing.JCheckBox();
         jPanel2 = new javax.swing.JPanel();
         jLabel3 = new javax.swing.JLabel();
         txtbins = new javax.swing.JTextField();
@@ -53,6 +54,9 @@ public final class TorrentExplorerPanel extends javax.swing.JPanel {
         jPanel3 = new javax.swing.JPanel();
         jLabel2 = new javax.swing.JLabel();
         txtSize = new javax.swing.JTextField();
+        jPanel4 = new javax.swing.JPanel();
+        jLabel4 = new javax.swing.JLabel();
+        txtPath = new javax.swing.JTextField();
 
         jPanel1.setBorder(javax.swing.BorderFactory.createTitledBorder(org.openide.util.NbBundle.getMessage(TorrentExplorerPanel.class, "TorrentExplorerPanel.jPanel1.border.title"))); // NOI18N
 
@@ -70,15 +74,27 @@ public final class TorrentExplorerPanel extends javax.swing.JPanel {
             }
         });
 
+        automatic.setSelected(true);
+        org.openide.awt.Mnemonics.setLocalizedText(automatic, org.openide.util.NbBundle.getMessage(TorrentExplorerPanel.class, "TorrentExplorerPanel.automatic.text")); // NOI18N
+        automatic.setToolTipText(org.openide.util.NbBundle.getMessage(TorrentExplorerPanel.class, "TorrentExplorerPanel.automatic.toolTipText")); // NOI18N
+        automatic.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                automaticActionPerformed(evt);
+            }
+        });
+
         javax.swing.GroupLayout jPanel1Layout = new javax.swing.GroupLayout(jPanel1);
         jPanel1.setLayout(jPanel1Layout);
         jPanel1Layout.setHorizontalGroup(
             jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addGroup(jPanel1Layout.createSequentialGroup()
-                .addComponent(jLabel1)
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                .addComponent(txtSpan, javax.swing.GroupLayout.PREFERRED_SIZE, 101, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addContainerGap(457, Short.MAX_VALUE))
+                .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                    .addGroup(jPanel1Layout.createSequentialGroup()
+                        .addComponent(jLabel1)
+                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                        .addComponent(txtSpan, javax.swing.GroupLayout.PREFERRED_SIZE, 101, javax.swing.GroupLayout.PREFERRED_SIZE))
+                    .addComponent(automatic))
+                .addContainerGap(348, Short.MAX_VALUE))
         );
         jPanel1Layout.setVerticalGroup(
             jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
@@ -86,7 +102,9 @@ public final class TorrentExplorerPanel extends javax.swing.JPanel {
                 .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
                     .addComponent(jLabel1)
                     .addComponent(txtSpan, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
-                .addContainerGap(88, Short.MAX_VALUE))
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
+                .addComponent(automatic)
+                .addContainerGap(23, Short.MAX_VALUE))
         );
 
         jPanel2.setBorder(javax.swing.BorderFactory.createTitledBorder(org.openide.util.NbBundle.getMessage(TorrentExplorerPanel.class, "TorrentExplorerPanel.jPanel2.border.title"))); // NOI18N
@@ -165,11 +183,45 @@ public final class TorrentExplorerPanel extends javax.swing.JPanel {
         );
         jPanel3Layout.setVerticalGroup(
             jPanel3Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addGroup(jPanel3Layout.createSequentialGroup()
-                .addGroup(jPanel3Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
-                    .addComponent(jLabel2)
-                    .addComponent(txtSize, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
-                .addContainerGap(68, Short.MAX_VALUE))
+            .addGroup(jPanel3Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                .addComponent(jLabel2)
+                .addComponent(txtSize, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
+        );
+
+        jPanel4.setBorder(javax.swing.BorderFactory.createTitledBorder(org.openide.util.NbBundle.getMessage(TorrentExplorerPanel.class, "TorrentExplorerPanel.jPanel4.border.title"))); // NOI18N
+
+        org.openide.awt.Mnemonics.setLocalizedText(jLabel4, org.openide.util.NbBundle.getMessage(TorrentExplorerPanel.class, "TorrentExplorerPanel.jLabel4.text")); // NOI18N
+
+        txtPath.setText(org.openide.util.NbBundle.getMessage(TorrentExplorerPanel.class, "TorrentExplorerPanel.txtPath.text")); // NOI18N
+        txtPath.setToolTipText(org.openide.util.NbBundle.getMessage(TorrentExplorerPanel.class, "TorrentExplorerPanel.txtPath.toolTipText")); // NOI18N
+        txtPath.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                txtPathActionPerformed(evt);
+            }
+        });
+        txtPath.addFocusListener(new java.awt.event.FocusAdapter() {
+            public void focusLost(java.awt.event.FocusEvent evt) {
+                txtPathFocusLost(evt);
+            }
+        });
+
+        javax.swing.GroupLayout jPanel4Layout = new javax.swing.GroupLayout(jPanel4);
+        jPanel4.setLayout(jPanel4Layout);
+        jPanel4Layout.setHorizontalGroup(
+            jPanel4Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(jPanel4Layout.createSequentialGroup()
+                .addComponent(jLabel4)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                .addComponent(txtPath, javax.swing.GroupLayout.DEFAULT_SIZE, 458, Short.MAX_VALUE)
+                .addContainerGap())
+        );
+        jPanel4Layout.setVerticalGroup(
+            jPanel4Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(jPanel4Layout.createSequentialGroup()
+                .addGroup(jPanel4Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                    .addComponent(jLabel4)
+                    .addComponent(txtPath, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
+                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
         );
 
         javax.swing.GroupLayout layout = new javax.swing.GroupLayout(this);
@@ -179,6 +231,7 @@ public final class TorrentExplorerPanel extends javax.swing.JPanel {
             .addComponent(jPanel1, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
             .addComponent(jPanel2, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
             .addComponent(jPanel3, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+            .addComponent(jPanel4, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
         );
         layout.setVerticalGroup(
             layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
@@ -187,7 +240,9 @@ public final class TorrentExplorerPanel extends javax.swing.JPanel {
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                 .addComponent(jPanel2, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                .addComponent(jPanel3, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+                .addComponent(jPanel3, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                .addComponent(jPanel4, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
         );
     }// </editor-fold>//GEN-END:initComponents
 
@@ -211,6 +266,18 @@ public final class TorrentExplorerPanel extends javax.swing.JPanel {
         controller.changed();
     }//GEN-LAST:event_txtbinsActionPerformed
 
+    private void txtPathActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_txtPathActionPerformed
+        // TODO add your handling code here:
+    }//GEN-LAST:event_txtPathActionPerformed
+
+    private void txtPathFocusLost(java.awt.event.FocusEvent evt) {//GEN-FIRST:event_txtPathFocusLost
+        // TODO add your handling code here:
+    }//GEN-LAST:event_txtPathFocusLost
+
+    private void automaticActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_automaticActionPerformed
+        // TODO add your handling code here:
+    }//GEN-LAST:event_automaticActionPerformed
+
     void load() {
         p = NbPreferences.forModule(TorrentExplorerPanel.class);
         this.txtSpan.setText(p.get("span", "" + 5));
@@ -219,7 +286,9 @@ public final class TorrentExplorerPanel extends javax.swing.JPanel {
         this.txtSize.setText(p.get("masksize", "" + 100));
         this.txtbins.setText(p.get("bins", "" + 100));
         second.setSelected(p.getBoolean("second", true));
+        this.automatic.setSelected(p.getBoolean("automatic_nn", true));
         norm.setSelected(p.getBoolean("normalize", true));
+        txtPath.setText(p.get("export_path", "/tmp"));
 //        String func = p.get("medianfunction", "median");
 //        p("Function is "+func);
 //        if (func.equalsIgnoreCase("mode")) mode.setSelected(true);
@@ -228,6 +297,7 @@ public final class TorrentExplorerPanel extends javax.swing.JPanel {
     }
 
     void store() {
+        p.put("export_path", txtPath.getText());
         p.put("span", "" + getInt(txtSpan));
 
         int size = getInt(txtSize);
@@ -281,6 +351,8 @@ public final class TorrentExplorerPanel extends javax.swing.JPanel {
         
         p.putBoolean("second", second.isSelected());
         p.putBoolean("normalize", norm.isSelected());
+        p.putBoolean("automatic_nn", automatic.isSelected());
+        
 //        String func = "median";
 //        if (mode.isSelected()) func = "mode";
 //        else if (mean.isSelected()) func = "mean";
@@ -309,15 +381,19 @@ public final class TorrentExplorerPanel extends javax.swing.JPanel {
         return true;
     }
     // Variables declaration - do not modify//GEN-BEGIN:variables
+    private javax.swing.JCheckBox automatic;
     private javax.swing.ButtonGroup buttonGroup1;
     private javax.swing.JLabel jLabel1;
     private javax.swing.JLabel jLabel2;
     private javax.swing.JLabel jLabel3;
+    private javax.swing.JLabel jLabel4;
     private javax.swing.JPanel jPanel1;
     private javax.swing.JPanel jPanel2;
     private javax.swing.JPanel jPanel3;
+    private javax.swing.JPanel jPanel4;
     private javax.swing.JCheckBox norm;
     private javax.swing.JCheckBox second;
+    private javax.swing.JTextField txtPath;
     private javax.swing.JTextField txtSize;
     private javax.swing.JTextField txtSpan;
     private javax.swing.JTextField txtbins;

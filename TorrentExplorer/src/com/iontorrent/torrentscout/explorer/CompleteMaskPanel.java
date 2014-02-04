@@ -26,6 +26,7 @@ import com.iontorrent.expmodel.ExperimentContext;
 import com.iontorrent.expmodel.Settings;
 import com.iontorrent.guiutils.GuiUtils;
 import com.iontorrent.rawdataaccess.wells.BitMask;
+import com.iontorrent.torrentscout.explorer.options.TorrentExplorerPanel;
 import com.iontorrent.utils.io.FileTools;
 import com.iontorrent.utils.io.FileUtils;
 import com.iontorrent.wellmodel.RasterData;
@@ -33,8 +34,10 @@ import com.iontorrent.wellmodel.WellCoordinate;
 import java.awt.Color;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.prefs.Preferences;
 import javax.swing.JOptionPane;
 import javax.swing.border.TitledBorder;
+import org.openide.util.NbPreferences;
 
 /**
  *
@@ -53,9 +56,12 @@ public class CompleteMaskPanel extends javax.swing.JPanel {
         initComponents();
         this.maincont = maincont;
         this.expContext = maincont.getExp();
-        // add widgets to density panel
+        update(mask);
+    }
+    private void update(BitMask mask) {
+         // add widgets to density panel
+        if (densityPanel != null) remove(densityPanel);
         densityPanel = new MaskEditDensityPanel(expContext, mask);
-
 
         densityPanel.setContext(mask, 1);
         densityPanel.showNavigationImage(false);
@@ -63,7 +69,6 @@ public class CompleteMaskPanel extends javax.swing.JPanel {
         this.mask = mask;
         add("Center", densityPanel);
     }
-
     public void setColors(Color[] gradientColors) {
         densityPanel.setColors(gradientColors);
     }
@@ -104,7 +109,6 @@ public class CompleteMaskPanel extends javax.swing.JPanel {
         delete = new javax.swing.JButton();
         panMask = new javax.swing.JPanel();
 
-        setBorder(javax.swing.BorderFactory.createTitledBorder(org.openide.util.NbBundle.getMessage(CompleteMaskPanel.class, "CompleteMaskPanel.border.title"))); // NOI18N
         setLayout(new java.awt.BorderLayout());
 
         panControls.setOpaque(false);
@@ -267,11 +271,11 @@ public class CompleteMaskPanel extends javax.swing.JPanel {
         panMask.setLayout(panMaskLayout);
         panMaskLayout.setHorizontalGroup(
             panMaskLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addGap(0, 388, Short.MAX_VALUE)
+            .addGap(0, 400, Short.MAX_VALUE)
         );
         panMaskLayout.setVerticalGroup(
             panMaskLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addGap(0, 250, Short.MAX_VALUE)
+            .addGap(0, 277, Short.MAX_VALUE)
         );
 
         add(panMask, java.awt.BorderLayout.CENTER);
@@ -284,8 +288,8 @@ public class CompleteMaskPanel extends javax.swing.JPanel {
     @Override
     public void setName(String name) {
         super.setName(name);
-        TitledBorder tb = (TitledBorder) this.getBorder();
-        tb.setTitle(name);
+//        TitledBorder tb = (TitledBorder) this.getBorder();
+//        tb.setTitle(name);
     }
 
     public void refresh() {
@@ -310,12 +314,13 @@ public class CompleteMaskPanel extends javax.swing.JPanel {
         Logger.getLogger(CompleteMaskPanel.class.getName()).log(Level.INFO, msg);
     }
     private void btnSaveActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnSaveActionPerformed
-        String file = FileTools.getFile("Save mask into file", "*.bit", "", true);
+        
+        String file = Export.getFile("Save mask into file", "*.bin", true);
         if (file == null) {
             return;
         }
         mask.write(file);
-        GuiUtils.showNonModalMsg("Mask written to file...");
+        GuiUtils.showNonModalMsg("Mask written to file "+file, "Mask");
     }//GEN-LAST:event_btnSaveActionPerformed
 
     private void txtNameActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_txtNameActionPerformed
@@ -347,7 +352,7 @@ public class CompleteMaskPanel extends javax.swing.JPanel {
                 return;
             }
             maincont.setRelDataAreaCoord(rel);
-            maincont.getExp().getWellContext().setCoordinate(maincont.getAbsDataAreaCoord());
+            maincont.getExp().getWellContext().setAbsCoordinate(maincont.getAbsDataAreaCoord());
             maincont.dataAreaCoordChanged(abs);
             maincont.getMasks().add(m);
             maincont.masksChanged();
@@ -380,7 +385,7 @@ public class CompleteMaskPanel extends javax.swing.JPanel {
     private void btnInvertActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnInvertActionPerformed
         mask.invert(mask);
         update();
-        GuiUtils.showNonModalMsg("Mask inverted");
+        GuiUtils.showNonModalMsg("Mask inverted", "Mask");
     }//GEN-LAST:event_btnInvertActionPerformed
 
     private void pinActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_pinActionPerformed
@@ -466,5 +471,6 @@ public class CompleteMaskPanel extends javax.swing.JPanel {
 
     void setMask(BitMask mask) {
         this.mask = mask;
+        setName(mask.getName());
     }
 }

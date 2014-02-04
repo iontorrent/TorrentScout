@@ -29,6 +29,7 @@ import com.iontorrent.utils.ToolBox;
 import com.iontorrent.utils.io.FileTools;
 import com.iontorrent.utils.io.FileUtils;
 import com.iontorrent.wellmodel.WellContext;
+import com.iontorrent.wellmodel.WellCoordinate;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -45,6 +46,7 @@ import java.util.logging.Logger;
  */
 public class ExperimentContext implements Serializable {
 
+    private DatBlock datblock;
     private String experimentName;
     private transient Vector<ExpContextChangedListener> list;
     //  private String rawDir;
@@ -75,7 +77,7 @@ public class ExperimentContext implements Serializable {
     private int coloffset;
     private int rowoffset;
     private String reportLink;
-    protected transient WellContext context;
+    protected  WellContext context;
     private RawType rawtype;
     private int flow;
     private int frame;
@@ -88,33 +90,83 @@ public class ExperimentContext implements Serializable {
         this.resDirFromDb = "";
         list = new Vector<ExpContextChangedListener>();
     }
+    /** closes any files such 1.wells, bfmask etc */
+    public void closeFiles() {
+        BfMask mask = this.getWellContext().getMask();
+        if (mask != null) mask.close();
+        
+        
+    }
+    public void makeRelative(WellCoordinate coord) {
+                // check those relative coords...
+        if (coord.getCol() >= getColOffset()) {
+            coord.setCol(coord.getCol() - getColOffset() );            
+        }
+        if (coord.getRow() >= getRowOffset()) {
+            coord.setRow(coord.getRow() - getRowOffset() );            
+        } 
+    }
+    public void makeAbsolute(WellCoordinate coord) {
+                // check those relative coords...
+        if (coord.getCol() <getColOffset()) {
+            coord.setCol(coord.getCol() +getColOffset() );            
+        }
+        if (coord.getRow() < getRowOffset()) {
+            coord.setRow(coord.getRow() + getRowOffset() );            
+        } 
+    }
+     public WellCoordinate getAbsolute(WellCoordinate c) {
+                // check those relative coords...
+         WellCoordinate coord = new WellCoordinate(c);
+        makeAbsolute(coord);
+        return coord;
+    }
+      public WellCoordinate getRelative(WellCoordinate c) {
+                // check those relative coords...
+         WellCoordinate coord = new WellCoordinate(c);
+        makeRelative(coord);
+        return coord;
+    }
 
+    public void setThumbnailsRaw() {
+        if (this.rawDir != null) {
+            if (rawDir.indexOf("thumbnail")<0) {
+                rawDir = rawDir + "thumbnail";
+                rawDir = FileTools.addSlashOrBackslash(rawDir);
+            }
+        }
+    }
+    public boolean isThumbnails() {
+        return this.resultsDir != null && resultsDir.indexOf("_tn_")>0;
+    }
     /** creates a mostly unique file key hash to be used for index files */
     public String getFileKey() {
         String h = "";
-        if (this.getChipType() != null && this.getChipType().length() > 1) {
-            h = this.getChipType() + "_";
-        }
-        if (this.getResultsName() != null && this.getResultsName().length() > 1) {
-            h += this.getResultsName() + "_";
-        }
-
+     
         String dir = this.getRawDir();
-        if (dir != null || dir.trim().length() > 1) {
+        if (dir != null && dir.trim().length() > 1) {
+            File f = new File(dir);
+            dir = f.getName();
+            if (f.getParentFile() != null) dir = f.getParentFile().getName()+dir;
+       //     p("getFileKey: rawdir="+dir);
             h += Math.abs(dir.hashCode());
         }
         dir = this.getResultsDirectory();
-        if (dir != null || dir.trim().length() > 1) {
+        if (dir != null && dir.trim().length() > 1) {
+            File f = new File(dir);
+            dir = f.getName();
+            if (f.getParentFile() != null) dir = f.getParentFile().getName()+dir;
+   //         p("getFileKey: resdir="+dir);
             h += Math.abs(dir.hashCode());
         }
         String tmp = h;
         for (int i = 0; i < tmp.length(); i++) {
             char c = tmp.charAt(i);
             if (!Character.isLetterOrDigit(c)) {
-                h = h.replace(c, '_');
+                h = h.replace(c, 'a');
             }
         }
-        p("Got experiment filekey: " + h);
+  //      p("Got experiment filekey: " + h);
         return h;
     }
 
@@ -194,6 +246,9 @@ public class ExperimentContext implements Serializable {
         this.cacheDir = dir;
     }
 
+    public String getBase(int flow) {
+        return ""+getWellContext().getBase(flow);
+    }
     public void expandCacheDir(String cache) {
 
         String res = getResultsName();
@@ -240,24 +295,26 @@ public class ExperimentContext implements Serializable {
 
     public String toString() {
         String s = "";
-        s += "PGM name:   " + getPgm() + "\n";
-        s += "Exp name:   " + getExperimentName() + "\n";
-        s += "Exp dir:    " + getExpDir() + "\n";
+      //  s += "PGM name:   " + getPgm() + "\n";
+      //  s += "Exp name:   " + getExperimentName() + "\n";
+      //  s += "Exp dir:    " + getExpDir() + "\n";
         s += "Result name:" + this.getResultsName() + "\n";
         s += "Result dir: " + getResultsDirectory() + "\n";
-        s += "Report link: " + getReportLink() + "\n";
-        s += "Db Res dir: " + getResDirFromDb() + "\n";
+       // s += "Report link: " + getReportLink() + "\n";
+      //  s += "Db Res dir: " + getResDirFromDb() + "\n";
         s += "Cache dir:  " + getCacheDir() + "\n";
         s += "Raw dir: " + getRawDir() + "\n";
         s += "Sff name:   " + this.getSffFileName() + "\n";
-        s += "Sff tf name:   " + this.getSfftffilename() + "\n";
+       // s += "Sff tf name:   " + this.getSfftffilename() + "\n";
         s += "BAM name:   " + this.getBamFileName() + "\n";
         s += "library key:" + getLibraryKey() + "\n";
-        s += "# flows:    " + getNrFlows() + "\n";
+     //   s += "# flows:    " + getNrFlows() + "\n";
         s += "# cols  " + getNrcols() + "\n";
         s += "# rows  " + getNrrows() + "\n";
-        s += "TF sequence:" + getTfSequence() + "\n";
-        s += "Flow order: " + getFlowOrder() + "\n";
+        s += "col offset:  " + this.getColOffset() + "\n";
+        s += "row offset:  " + this.getRowOffset() + "\n";
+       // s += "TF sequence:" + getTfSequence() + "\n";
+       // s += "Flow order: " + getFlowOrder() + "\n";
         return s;
     }
 
@@ -479,6 +536,7 @@ public class ExperimentContext implements Serializable {
     public String getResultsDirectory() {
         return this.resultsDir;
     }
+    
 
     public void setResultsDirectory(String dir) {
         dir = FileTools.addSlashOrBackslash(dir);
@@ -516,6 +574,7 @@ public class ExperimentContext implements Serializable {
     }
 
     public void setSffFilename(String name) {
+        
         this.sfffilename = getLastPart(name);
     }
 
@@ -524,6 +583,10 @@ public class ExperimentContext implements Serializable {
     }
 
     public String getLastPart(String file) {
+        if (file == null) {
+            err("getLastPart: file is null");
+            return null;
+        }
         file = ToolBox.replace(file, "\\", "/");
         int sl = file.lastIndexOf("/");
         if (sl > -1) {
@@ -669,6 +732,7 @@ public class ExperimentContext implements Serializable {
      * @param ignoreRule the ignoreRule to set
      */
     public void setIgnoreRule(boolean ignoreRule) {
+        p("Setting ignore rule to true");
         this.ignoreRule = ignoreRule;
     }
 
@@ -707,6 +771,15 @@ public class ExperimentContext implements Serializable {
         this.status = status;
     }
 
+    public boolean isSameExperiment(ExperimentContext exp) {
+        if (this.nrcols != exp.nrcols) return false;
+        if (this.nrrows != exp.nrrows) return false;
+        if (this.coloffset != exp.coloffset) return false;
+        if (this.rowoffset != exp.rowoffset) return false;
+        if (this.rawDir != null && exp.rawDir != null && !rawDir.equals(exp.rawDir)) return false;
+        if (this.resultsDir != null && exp.resultsDir != null && !resultsDir.equals(exp.resultsDir)) return false;
+        return true;
+    }
     public boolean isCompleted() {
         return status != null && status.equalsIgnoreCase("completed");
     }
@@ -755,8 +828,12 @@ public class ExperimentContext implements Serializable {
         return FileUtils.exists(this.getResultsDirectory() + this.getSffFileName());
     }
 
-    public boolean hasDat() {
+    public boolean hasDat() {        
         return FileUtils.exists(this.getRawDir() + "acq_00000.dat");
+    }
+    public boolean hasDat(RawType type, int flow) {
+        String file = type.getRawFileName(flow);
+        return FileUtils.exists(this.getRawDir() + file);
     }
 
     public boolean hasBam() {
@@ -765,8 +842,6 @@ public class ExperimentContext implements Serializable {
 
     public void setFileType(RawType rawType) {
         p("========= setFileType: " + rawType);
-        Exception e = new Exception("test");
-        p("setFleType stack grace: " + ErrorHandler.getString(e));
         if (this.rawtype != rawType) {
             this.rawtype = rawType;
             p("Got file type " + rawType);
@@ -831,11 +906,18 @@ public class ExperimentContext implements Serializable {
         }
     }
 
-    public void setThumbnails(boolean b) {
-        this.thumbnails = b;
+
+    /**
+     * @return the datblock
+     */
+    public DatBlock getDatblock() {
+        return datblock;
     }
 
-    public boolean isThumbnails() {
-        return thumbnails;
+    /**
+     * @param datblock the datblock to set
+     */
+    public void setDatblock(DatBlock datblock) {
+        this.datblock = datblock;
     }
 }

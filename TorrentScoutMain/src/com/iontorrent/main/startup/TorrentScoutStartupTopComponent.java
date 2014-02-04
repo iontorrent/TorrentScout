@@ -135,7 +135,7 @@ public final class TorrentScoutStartupTopComponent extends TopComponent implemen
         }
 
         skin = skin.toLowerCase().trim();
-        p("Setting skin to " + skin);
+      //  p("Setting skin to " + skin);
 
         if (skin.startsWith("mcwin")) {
             com.jtattoo.plaf.mcwin.McWinLookAndFeel.setTheme("Default");
@@ -311,7 +311,7 @@ public final class TorrentScoutStartupTopComponent extends TopComponent implemen
             t.execute();
             // updateInfo();
         }
-
+        showMainComponent();
     }
 
     public void checkAndMaybeConvertFiles() {
@@ -443,7 +443,7 @@ public final class TorrentScoutStartupTopComponent extends TopComponent implemen
     }
 
     private void loadPreferences() {
-        p("Loading startup preferences");
+    //    p("Loading startup preferences");
         // TODO read settings and initialize GUI
         // Example:        
         // someCheckBox.setSelected(Preferences.userNodeForPackage(IonogramOptionsPanel.class).getBoolean("someFlag", false));
@@ -503,34 +503,51 @@ public final class TorrentScoutStartupTopComponent extends TopComponent implemen
         context = GlobalContext.getContext();
         FolderManager manager = FolderManager.getManager();
         default_rule = manager.setDefaultRule();
-
+        p("Got default rule="+default_rule);
         if (default_rule == null || default_rule.length() < 1 || default_rule.startsWith("offline")) {
             showOfflineComponent();
         }
     }
 
     private void showExperimentViewer() {
-        SwingUtilities.invokeLater(new Runnable() {
-
-            public void run() {
-                TopComponent tc = (TopComponent) WindowManager.getDefault().findTopComponent("ExperimentViewerTopComponent");
-                if (tc != null) {
-                    tc.requestActive();
-                    tc.requestVisible();
-                }
-            }
-        });
+//        SwingUtilities.invokeLater(new Runnable() {
+//
+//            public void run() {
+//                TopComponent tc = (TopComponent) WindowManager.getDefault().findTopComponent("ExperimentViewerTopComponent");
+//                if (tc != null) {
+//                    tc.requestActive();
+//                    tc.requestVisible();
+//                }
+//            }
+//        });
 
     }
 
     private void showOfflineComponent() {
+//        SwingUtilities.invokeLater(new Runnable() {
+//
+//            public void run() {
+//                TopComponent tc = (TopComponent) WindowManager.getDefault().findTopComponent("OfflineTopComponent");
+//                if (tc != null) {
+//                    tc.requestActive();
+//                    tc.requestVisible();
+//                }
+//            }
+//        });
+
+    }
+     private void showMainComponent() {
         SwingUtilities.invokeLater(new Runnable() {
 
+            @Override
             public void run() {
-                TopComponent tc = (TopComponent) WindowManager.getDefault().findTopComponent("OfflineTopComponent");
+                TopComponent tc = (TopComponent) WindowManager.getDefault().findTopComponent("TorrentScoutMainPageTopComponent");
+                p("Showing TorrentScoutMainPageTopComponent");
                 if (tc != null) {
+                    
                     tc.requestActive();
                     tc.requestVisible();
+                    tc.requestAttention(true);
                 }
             }
         });

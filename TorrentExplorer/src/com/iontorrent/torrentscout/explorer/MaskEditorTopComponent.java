@@ -18,16 +18,19 @@ package com.iontorrent.torrentscout.explorer;
 
 import com.iontorrent.expmodel.ExperimentContext;
 import com.iontorrent.expmodel.GlobalContext;
+import com.iontorrent.guiutils.FlowPanel;
 import com.iontorrent.guiutils.GuiUtils;
 import com.iontorrent.guiutils.netbeans.OpenWindowAction;
 import com.iontorrent.guiutils.wells.SingleCoordSelectionPanel;
 import com.iontorrent.rawdataaccess.wells.BitMask;
 import com.iontorrent.torrentscout.explorer.edit.MaskCalcPanel;
 import com.iontorrent.torrentscout.explorer.edit.MaskCommandPanel;
+import com.iontorrent.torrentscout.explorer.edit.PickMaskPanel;
 import com.iontorrent.utils.LookupUtils;
 import com.iontorrent.utils.io.FileTools;
 import com.iontorrent.wellmodel.WellCoordinate;
 import com.iontorrent.wellmodel.WellSelection;
+import java.awt.BorderLayout;
 import java.awt.HeadlessException;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
@@ -37,8 +40,11 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.prefs.Preferences;
 import javax.swing.Action;
+import javax.swing.JComboBox;
 import javax.swing.JOptionPane;
+import javax.swing.JPanel;
 import javax.swing.JTabbedPane;
+import javax.swing.SwingUtilities;
 import org.openide.util.NbBundle;
 import org.openide.windows.TopComponent;
 import org.netbeans.api.settings.ConvertAsProperties;
@@ -59,7 +65,7 @@ import org.openide.util.lookup.InstanceContent;
 autostore = false)
 @TopComponent.Description(preferredID = "MaskEditorTopComponent",
 iconBase = "com/iontorrent/torrentscout/explorer/mask.png",
-persistenceType = TopComponent.PERSISTENCE_ALWAYS)
+persistenceType = TopComponent.PERSISTENCE_NEVER)
 @TopComponent.Registration(mode = "table_mode", openAtStartup = false)
 @ActionID(category = "Window", id = "com.iontorrent.torrentscout.explorer.MaskEditorTopComponent")
 @ActionReference(path = "Menu/Window" /*, position = 333 */)
@@ -67,16 +73,19 @@ persistenceType = TopComponent.PERSISTENCE_ALWAYS)
 preferredID = "MaskEditorTopComponent")
 public final class MaskEditorTopComponent extends TopComponent implements ActionListener {
 
-    HashMap<String, CompleteMaskPanel> maskmap;
     int MAXPANELS = 4 * 50;
     //  CompleteMaskPanel[] maskpanels;
     ExperimentContext expContext;
     ExplorerContext maincontext;
-    ArrayList<BitMask> masks;
     MaskCommandPanel cmd;
     JTabbedPane tab;
     MaskCalcPanel calc;
     String savefile;
+    JComboBox maskbox;
+    JPanel panmasks;
+    CompleteMaskPanel curpanel;
+    PickMaskPanel pick;
+    
     private transient final InstanceContent wellSelectionContent = LookupUtils.getPublisher(WellSelection.class);
     private transient final Lookup.Result<ExperimentContext> expContextResults =
             LookupUtils.getSubscriber(ExperimentContext.class, new SubscriberListener());
@@ -85,25 +94,42 @@ public final class MaskEditorTopComponent extends TopComponent implements Action
         initComponents();
         setName(NbBundle.getMessage(MaskEditorTopComponent.class, "CTL_MaskEditorTopComponent"));
         setToolTipText(NbBundle.getMessage(MaskEditorTopComponent.class, "HINT_MaskEditorTopComponent"));
+        maskbox = new JComboBox();
+        maskbox.addActionListener(new ActionListener() {
 
-        createDefaultMasks();
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                p("item selected");
+                showMask((BitMask) maskbox.getSelectedItem());
+            }
+        });
+        panmasks = new JPanel();
+        panmasks.setLayout(new BorderLayout());
+        panmasks.add("North", new FlowPanel(maskbox));
+       
+        createDefaultMasks(true);
         calc = new MaskCalcPanel(maincontext);
         tab = new JTabbedPane();
         //this.panTop.add("North", calc);
         cmd = new MaskCommandPanel(maincontext, this);
+        pick = new PickMaskPanel(maincontext);
         //panTop.add("Center", cmd);
+         tab.add("Pick Masks", pick);
+        tab.add("View Mask", panmasks);
         tab.add("Drop Down Calculator", calc);
-        tab.add("Command Line Editor", cmd);
+        tab.add("Command Line Calculator", cmd);
+       
         panTop.add("Center", tab);
+
     }
 
     public void refreshAllMasks() {
         p("refreshing all masks");
-        panMasks.removeAll();
-        maskmap = new HashMap<String, CompleteMaskPanel>();
-        masks = maincontext.getMasks();
+        
+        ArrayList<BitMask> masks = maincontext.getMasks();
         info.setText("   " + maincontext.getExp().getBfMaskFile());
         int nr = 0;
+        maskbox.removeAllItems();
         if (masks != null && masks.size() > 0) {
             for (int i = 0; i < masks.size(); i++) {
                 BitMask mask = masks.get(i);
@@ -115,13 +141,13 @@ public final class MaskEditorTopComponent extends TopComponent implements Action
         } else {
             GuiUtils.showNonModalMsg("I see no data and hence cannot create any masks. Load some data first (select a region on the chip)");
         }
-
+        if (maincontext.getSignalMask() != null) {
+            this.maskbox.setSelectedItem(maincontext.getSignalMask());
+            showMask(maincontext.getSignalMask());
+        }
         // addEmpty();
-        invalidate();
-        revalidate();
         repaint();
-        panMasks.repaint();
-
+        
         //BitMask last = new BitMask();
     }
 
@@ -131,7 +157,7 @@ public final class MaskEditorTopComponent extends TopComponent implements Action
         }
         p("====recreate all masks, calling maincontext. createMasks");
         this.maincontext.createMasks();
-        this.createDefaultMasks();
+        this.createDefaultMasks(true);
         // also create drop down calculator
 //        if (calc != null) {
 //            tab.remove(calc);
@@ -147,7 +173,7 @@ public final class MaskEditorTopComponent extends TopComponent implements Action
 
     protected boolean saveAs(boolean ask) throws HeadlessException {
         if (ask || savefile == null) {
-            savefile = FileTools.getFile("Save all masks, settings, coordinates to file", "*.*", savefile, true);
+            savefile = Export.getFile("Save all masks, settings, coordinates to file", "*.bin", true);
         }
         if (savefile == null) {
 
@@ -178,7 +204,7 @@ public final class MaskEditorTopComponent extends TopComponent implements Action
         WellSelection sel = new WellSelection(c1, c2);
         if (maincontext.getAbsDataAreaCoord() != null && abs.equals(maincontext.getAbsDataAreaCoord())) {
             GuiUtils.showNonModalMsg("Same coordinates, I won'd to anything");
-            return ;
+            return;
         }
         this.maincontext.setAbsDataAreaCoord(abs);
         LookupUtils.publish(wellSelectionContent, sel);
@@ -186,15 +212,12 @@ public final class MaskEditorTopComponent extends TopComponent implements Action
     }
 
     public void addEmpty() {
-        if (masks.size() < 1) {
-            GuiUtils.showNonModalMsg("Got no masks as template");
-            return;
-        }
-
-        BitMask first = masks.get(0);
+        if (maincontext.getMasks() == null ) return;
+        BitMask first = maincontext.getMasks().get(0);
         BitMask mask = new BitMask(first);
-        mask.setName("" + masks.size());
-        addMask(mask);
+        mask.setName("" + maincontext.getMasks().size());
+        maincontext.masAdded(mask);
+        showMask(mask);
 
     }
 
@@ -209,12 +232,23 @@ public final class MaskEditorTopComponent extends TopComponent implements Action
         maincontext.setSpan(span);
     }
 
-    private void createDefaultMasks() {
+    private void createDefaultMasks(boolean tryagain) {
         if (expContext == null) {
             expContext = GlobalContext.getContext().getExperimentContext();
         }
         if (expContext == null) {
             //  GuiUtils.showNonModalMsg("Got no experiment context");
+            // try again in a second;
+            if (tryagain) {
+                SwingUtilities.invokeLater(new Runnable() {
+
+                    @Override
+                    public void run() {
+                        createDefaultMasks(false);
+                    }
+                });
+            }
+
             return;
         }
 
@@ -223,7 +257,7 @@ public final class MaskEditorTopComponent extends TopComponent implements Action
         getUserPreferences();
         if (maincontext.getAbsDataAreaCoord() == null) {
             GuiUtils.showNonModalMsg("Got no main coordinate - but must still clear masks!");
-           // return;
+            // return;
         }
 
         //    maskpanels = new CompleteMaskPanel[MAXPANELS];
@@ -233,6 +267,7 @@ public final class MaskEditorTopComponent extends TopComponent implements Action
             @Override
             public void maskAdded(BitMask mask) {
                 addMask(mask);
+                showMask(mask);
             }
 
             @Override
@@ -241,11 +276,9 @@ public final class MaskEditorTopComponent extends TopComponent implements Action
 
             }
 
-           
-
             @Override
             public void dataAreaCoordChanged(WellCoordinate coord) {
-                p("Recreating all masks");
+                p("dataAreaCoordChanged: Recreating all masks");
                 recreateAllMasks();
 
             }
@@ -264,25 +297,30 @@ public final class MaskEditorTopComponent extends TopComponent implements Action
 
     public void updateMask(BitMask mask) {
         p("mask changed: " + mask);
-        CompleteMaskPanel mp = maskmap.get(mask.getName());
-        if (mp == null) {
-            p("got no mask panel with name " + mask.getName() + ", adding it");
-            addMask(mask);
-        } else {
-            p("refreshing mask " + mask);
-            mp.setMask(mask);
-            mp.refresh();
+        showMask(mask);
+    }
+
+    public void showMask(BitMask mask) {
+        if (mask == null) return;
+        if (curpanel == null) {
+            curpanel = new CompleteMaskPanel(this.maincontext, mask);
+            panmasks.add("Center", curpanel);
+        }
+        else {
+            curpanel.setMask(mask);
+            curpanel.refresh();
         }
     }
 
     public void addMask(BitMask mask) {
-        // mask.setSelectedWells...
-        CompleteMaskPanel mp = new CompleteMaskPanel(this.maincontext, mask);
-        maskmap.put(mask.getName(), mp);
-        mp.setName(mask.getName());
-
-        panMasks.add(mp);
-        mp.repaint();
+        // mask.setSelectedWells...       
+        boolean found = false;
+        for (int i = 0; !found && i < maskbox.getItemCount(); i++) {
+            BitMask b = (BitMask)maskbox.getItemAt(i);
+            if (b == mask) found = true;
+        }
+        if (!found) maskbox.addItem(mask);
+        //  mp.repaint();
         if (!maincontext.getMasks().contains(mask)) {
             maincontext.addMask(mask);
         }
@@ -323,7 +361,7 @@ public final class MaskEditorTopComponent extends TopComponent implements Action
     }
 
     private void update(ExperimentContext result) {
-        p("updating exp context "+result.getResultsDirectory());
+        p("updating exp context " + result.getResultsDirectory());
         if (result == null) {
             result = GlobalContext.getContext().getExperimentContext();
         }
@@ -331,7 +369,7 @@ public final class MaskEditorTopComponent extends TopComponent implements Action
             this.expContext = result;
             maincontext = ExplorerContext.getCurContext(result);
             getUserPreferences();
-            createDefaultMasks();
+            createDefaultMasks(true);
         }
     }
 
@@ -353,8 +391,6 @@ public final class MaskEditorTopComponent extends TopComponent implements Action
         hint = new javax.swing.JButton();
         info = new javax.swing.JLabel();
         panTop = new javax.swing.JPanel();
-        jScrollPane1 = new javax.swing.JScrollPane();
-        panMasks = new javax.swing.JPanel();
 
         toolbar.setRollover(true);
         toolbar.setOpaque(false);
@@ -457,15 +493,11 @@ public final class MaskEditorTopComponent extends TopComponent implements Action
 
         panTop.setLayout(new java.awt.BorderLayout());
 
-        panMasks.setLayout(new java.awt.GridLayout(5, 4));
-        jScrollPane1.setViewportView(panMasks);
-
         javax.swing.GroupLayout layout = new javax.swing.GroupLayout(this);
         this.setLayout(layout);
         layout.setHorizontalGroup(
             layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addComponent(toolbar, javax.swing.GroupLayout.DEFAULT_SIZE, 827, Short.MAX_VALUE)
-            .addComponent(jScrollPane1, javax.swing.GroupLayout.Alignment.TRAILING, javax.swing.GroupLayout.DEFAULT_SIZE, 827, Short.MAX_VALUE)
             .addComponent(panTop, javax.swing.GroupLayout.DEFAULT_SIZE, 827, Short.MAX_VALUE)
         );
         layout.setVerticalGroup(
@@ -474,8 +506,7 @@ public final class MaskEditorTopComponent extends TopComponent implements Action
                 .addComponent(toolbar, javax.swing.GroupLayout.PREFERRED_SIZE, 25, javax.swing.GroupLayout.PREFERRED_SIZE)
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                 .addComponent(panTop, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                .addComponent(jScrollPane1, javax.swing.GroupLayout.DEFAULT_SIZE, 416, Short.MAX_VALUE))
+                .addContainerGap(422, Short.MAX_VALUE))
         );
     }// </editor-fold>//GEN-END:initComponents
 
@@ -494,17 +525,17 @@ public final class MaskEditorTopComponent extends TopComponent implements Action
 		}//GEN-LAST:event_btnSelectActionPerformed
 
     private void loadActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_loadActionPerformed
-        String file = FileTools.getFile("Load masks, settings, coordinates from file", "*.*", null, false);
+        String file = Export.getFile("Load masks, settings, coordinates from file", "*.bin", false);
         if (file == null) {
             return;
         }
-        GuiUtils.showNonModalMsg("Loading masks and refreshing all views...");
+        GuiUtils.showNonModalMsg("Loading masks and moving position and refreshing all views...");
         String res = maincontext.loadContext(file);
         if (res != null) {
             JOptionPane.showMessageDialog(this, res);
         }
 
-        JOptionPane.showMessageDialog(this, "The masks and coordinates have been loaded");
+        JOptionPane.showMessageDialog(this, "The masks and coordinates have been loaded for " + maincontext.getAbsDataAreaCoord());
         // this.refreshAllMasks();
     }//GEN-LAST:event_loadActionPerformed
 
@@ -534,9 +565,7 @@ public final class MaskEditorTopComponent extends TopComponent implements Action
     private javax.swing.JButton btnSelect;
     private javax.swing.JButton hint;
     private javax.swing.JLabel info;
-    private javax.swing.JScrollPane jScrollPane1;
     private javax.swing.JButton load;
-    private javax.swing.JPanel panMasks;
     private javax.swing.JPanel panTop;
     private javax.swing.JButton save;
     private javax.swing.JButton saveas;
@@ -571,7 +600,7 @@ public final class MaskEditorTopComponent extends TopComponent implements Action
         //   DOACTIONS = false;
         //   loadPreferences();
         getLatestExperimentContext();
-        this.createDefaultMasks();
+        this.createDefaultMasks(true);
 
 
     }

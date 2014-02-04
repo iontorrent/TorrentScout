@@ -1,19 +1,19 @@
 /*
-*	Copyright (C) 2011 Life Technologies Inc.
-*
-*   This program is free software: you can redistribute it and/or modify
-*   it under the terms of the GNU General Public License as published by
-*   the Free Software Foundation, either version 2 of the License, or
-*   (at your option) any later version.
-*
-*   This program is distributed in the hope that it will be useful,
-*   but WITHOUT ANY WARRANTY; without even the implied warranty of
-*   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-*   GNU General Public License for more details.
-*
-*   You should have received a copy of the GNU General Public License
-*   along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
+ *	Copyright (C) 2011 Life Technologies Inc.
+ *
+ *   This program is free software: you can redistribute it and/or modify
+ *   it under the terms of the GNU General Public License as published by
+ *   the Free Software Foundation, either version 2 of the License, or
+ *   (at your option) any later version.
+ *
+ *   This program is distributed in the hope that it will be useful,
+ *   but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *   GNU General Public License for more details.
+ *
+ *   You should have received a copy of the GNU General Public License
+ *   along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
 /*
  * To change this template, choose Tools | Templates
  * and open the template in the editor.
@@ -25,9 +25,11 @@ import com.iontorrent.rawdataaccess.wells.BfMask;
 import com.iontorrent.rawdataaccess.wells.BfMaskReader;
 import com.iontorrent.rawdataaccess.wells.WellData;
 import com.iontorrent.rawdataaccess.wells.WellsReader;
+import com.iontorrent.results.scores.ScoreMask;
 import com.iontorrent.utils.io.FileTools;
 import com.iontorrent.utils.io.FileUtils;
 import java.io.File;
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.logging.Level;
@@ -37,51 +39,53 @@ import java.util.logging.Logger;
  *
  * @author Chantal Roth
  */
-public class WellContext {
+public class WellContext implements Serializable {
 
     private WellSelection selection;
     private WellCoordinate coordinate;
-    private BfMask mask;
+    private transient BfMask mask;
+    private transient ScoreMask scoremask;
     private File wellsfile;
     private String flowSequence;
     private int nrflows;
-   
-    private HashMap<String, WellData> datacache = new HashMap<String, WellData>();
-
+    private transient HashMap<String, WellData> datacache = new HashMap<String, WellData>();
     private ExperimentContext exp;
-    
+
     public WellContext(ExperimentContext exp) {
         //results_dir = FileTools.addSlashOrBackslash(results_dir);
-       this.exp = exp;
-            
+        this.exp = exp;
+
         this.wellsfile = new File(exp.getResultsDirectory() + "1.wells");
 //        if ( !wellsfile.exists()) {
 //            wellsfile = new File(exp.getCacheDir() + "1.wells");
 //        }
-        
+
     }
+
     public ExperimentContext getExpContext() {
         return exp;
     }
-    
 
     public String getChipType() {
         return exp.getChipType();
     }
+
     public boolean is314() {
         return exp.is314();
     }
-    
+
     public boolean is316() {
         return exp.is316();
     }
+
     public boolean isChipBB() {
         return exp.isChipBB();
     }
+
     public boolean is318() {
         return exp.is318();
     }
-   
+
     public int getApproxSizeInMB() {
         return (int) (getNrCols() * getNrRows() / 2500000.0 * getNrFlwos());
     }
@@ -99,11 +103,11 @@ public class WellContext {
                 if (reader.getHeader() != null) {
                     flowSequence = reader.getHeader().getFlowSequence();
                     nrflows = reader.getHeader().getNrFlows();
-                    reader.close();
+                   
                 }
-            }
-            catch (Exception e) {
-                err("Could not read 1.wells file "+wellsfile);
+                reader.close();
+            } catch (Exception e) {
+                err("Could not read 1.wells file " + wellsfile);
             }
         }
     }
@@ -128,20 +132,20 @@ public class WellContext {
     }
 
     public String toString() {
-        return "WellContext:\nexp: " + exp.toString()+ "\nwellsfile=" + wellsfile + "\nnrflows=" + nrflows + "\nselection=" + selection + "\ncoordinate=" + coordinate;
+        return "WellContext:\nexp: " + exp.toString() + "\nwellsfile=" + wellsfile + "\nnrflows=" + nrflows + "\nselection=" + selection + "\ncoordinate=" + coordinate;
     }
 
     private void clearCache() {
-        selection.clearCache();
-        datacache.clear();
+        if (selection != null) selection.clearCache();
+        if (datacache != null) datacache.clear();
     }
 
     public ArrayList<WellCoordinate> getAllFilteredWells() {
         if (selection == null) {
-            selection = new WellSelection(this.coordinate, this.coordinate);            
+            selection = new WellSelection(this.coordinate, this.coordinate);
         }
         if (getMask() == null) {
-            ArrayList<WellCoordinate> res= new ArrayList<WellCoordinate>();
+            ArrayList<WellCoordinate> res = new ArrayList<WellCoordinate>();
             res.add(coordinate);
             return res;
         }
@@ -160,15 +164,24 @@ public class WellContext {
             err("Coord is null");
         } else {
             coord.setMaskdata(mask.getDataPointAt(coord.getCol(), coord.getRow()));
-        }
+        }        
+        coord.setScoredata(getScoreMask().getDataPointsAt(coord.getCol(), coord.getRow()));
     }
 
+    public ScoreMask getScoreMask() {
+        if (scoremask == null)  {
+            scoremask = ScoreMask.getMask(exp, this);
+            scoremask.readAllData();
+        }
+        return scoremask;
+    }
     public WellData getWellData(int c, int r) {
-         if (c < 0 || r < 0) {
+        if (c < 0 || r < 0) {
             err("readWell: Negative coords, returning null.");
             return null;
         }
         String key = c + ":" + r;
+        if (datacache == null) datacache = new HashMap<String, WellData>();
         WellData welldata = datacache.get(key);
         if (welldata != null) {
             return welldata;
@@ -179,14 +192,21 @@ public class WellContext {
             return null;
 
         }
-         p("Getting well data at "+key);
+        p("Getting well data at " + key);
         WellsReader reader = new WellsReader(getWellsfile(), getMask());
-        
-        if (c - exp.getColOffset()>=0) c = c - exp.getColOffset();
-        if (r - exp.getRowOffset()>=0) r = r - exp.getRowOffset();
-         
+
+        if (c - exp.getColOffset() >= 0) {
+            c = c - exp.getColOffset();
+        }
+        if (r - exp.getRowOffset() >= 0) {
+            r = r - exp.getRowOffset();
+        }
+
         welldata = reader.readWell(c, r);
-        if (datacache.size()>100) datacache.clear();
+        reader.close();
+        if (datacache.size() > 100) {
+            datacache.clear();
+        }
         datacache.put(key, welldata);
         if (welldata == null || welldata.getSequence() == null) {
             return null;
@@ -219,19 +239,25 @@ public class WellContext {
         return selection;
     }
 
-    
     public int getNrWells() {
-        if (selection == null) return 0;    
+        if (selection == null) {
+            return 0;
+        }
         return selection.getAllWells().size();
     }
+
     /**
      * @param selection the selection to set
      */
     public void setSelection(WellSelection sel) {
         ArrayList<WellFilter> filters = null;
-        if (selection != null) filters = selection.getFilters();
+        if (selection != null) {
+            filters = selection.getFilters();
+        }
         this.selection = sel;
-        if (selection != null) selection.setFilters(filters);
+        if (selection != null) {
+            selection.setFilters(filters);
+        }
         clearCache();
     }
 
@@ -239,29 +265,35 @@ public class WellContext {
      * @return the coordinate
      */
     public WellCoordinate getCoordinate() {
-        return coordinate;
-    }
-
-    public WellCoordinate getAbsoluteCoordinate() {
-        if (coordinate == null) {
+         if (coordinate == null) {
             if (this.getSelection() != null) {
-                p("Using coor from selection");
+                p("Using coord from selection");
                 coordinate = this.getSelection().getCoord1();
             }
             if (coordinate == null) {
-                p("Got no coordinate and no selection, using 0,0");
-                coordinate = new WellCoordinate(0,0);
+                p("Got no coordinate and no selection, using middle of chip");
+                coordinate = new WellCoordinate(this.getNrCols()/2, this.getNrRows()/2);
             }
         }
-        //if (coordinate == null) return null;
-        int x = coordinate.getCol()+exp.getColOffset();
-        int y = coordinate.getRow()+exp.getRowOffset();
-        return new WellCoordinate(x, y);
+         return coordinate;
     }
+
+    public WellCoordinate getAbsoluteCoordinate() {
+        getCoordinate();
+        //if (coordinate == null) return null;
+        int x = coordinate.getCol();
+        int y = coordinate.getRow();
+        WellCoordinate abs = new WellCoordinate(x, y);
+        exp.makeAbsolute(abs);
+        return abs;
+    }
+
     /**
      * @param coordinate the coordinate to set
      */
     public void setCoordinate(WellCoordinate coordinate) {
+        // check if coord is absolute or relative. It should be RELATIVE within this block
+       exp.makeRelative(coordinate);
         this.coordinate = coordinate;
         if (selection == null) {
             selection = new WellSelection(coordinate, coordinate);
@@ -275,9 +307,8 @@ public class WellContext {
         if (mask == null) {
             String maskfile = exp.getResultsDirectory() + "bfmask.bin";
             if (!FileUtils.exists(maskfile)) {
-                p("getMask: file "+maskfile +" not found ");
-            }
-            else {
+                p("getMask: file " + maskfile + " not found ");
+            } else {
                 BfMaskReader mr = new BfMaskReader(maskfile);
                 mr.readFile();
                 mask = mr.getMask();
@@ -287,15 +318,23 @@ public class WellContext {
     }
 
     public int getNrCols() {
-        if (getMask() != null) return mask.getNrCols();
-        else if (exp != null) return exp.getNrcols();
-        else return 0;
+        if (getMask() != null) {
+            return mask.getNrCols();
+        } else if (exp != null) {
+            return exp.getNrcols();
+        } else {
+            return 0;
+        }
     }
 
     public int getNrRows() {
-         if (getMask() != null)return mask.getNrRows();
-         else if (exp != null) return exp.getNrrows();
-         else return 0;
+        if (getMask() != null) {
+            return mask.getNrRows();
+        } else if (exp != null) {
+            return exp.getNrrows();
+        } else {
+            return 0;
+        }
     }
 
     /**
@@ -348,7 +387,9 @@ public class WellContext {
      * @param filters the filters to set
      */
     public void setFilters(ArrayList<WellFilter> filters) {
-        if (selection != null) selection.setFilters(filters);
+        if (selection != null) {
+            selection.setFilters(filters);
+        }
     }
 
     public void setAllWells(ArrayList<WellCoordinate> result) {
@@ -356,10 +397,16 @@ public class WellContext {
     }
 
     public void clear() {
-       this.datacache = null;
-       this.mask = null;
-       this.selection = null;
-       this.flowSequence = null;
-       
+        this.datacache = new HashMap<String, WellData>();
+        this.mask = null;
+        this.selection = null;
+        this.flowSequence = null;
+
+    }
+
+    public void setAbsCoordinate(WellCoordinate abs) {
+        WellCoordinate rel = new WellCoordinate(abs.getCol(), abs.getRow());
+        exp.makeRelative(rel);
+      this.setCoordinate(rel);
     }
 }

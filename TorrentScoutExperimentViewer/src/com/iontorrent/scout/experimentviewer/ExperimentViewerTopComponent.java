@@ -24,6 +24,7 @@ import com.iontorrent.expmodel.ExperimentLoader;
 import com.iontorrent.dataloading.CreateIndexTask;
 import com.iontorrent.dbaccess.RundbExperiment;
 import com.iontorrent.dbaccess.RundbReportstorage;
+import com.iontorrent.dbaccess.RundbResults;
 import com.iontorrent.expmodel.CompositeExperiment;
 import com.iontorrent.guiutils.netbeans.OpenWindowAction;
 import com.iontorrent.main.options.SiteList;
@@ -46,7 +47,11 @@ import com.iontorrent.expmodel.GlobalContext;
 import com.iontorrent.expmodel.LoadDataContext;
 import com.iontorrent.guiutils.GuiUtils;
 import com.iontorrent.main.FolderAction;
+import com.iontorrent.scout.experimentviewer.exptree.Q17BasesNodeFilter;
+import com.iontorrent.scout.experimentviewer.exptree.Q17MaxLenNodeFilter;
 import com.iontorrent.scout.experimentviewer.exptree.RigNode;
+import com.iontorrent.scout.experimentviewer.table.TableListener;
+import com.iontorrent.scout.experimentviewer.table.TablePanel;
 import com.iontorrent.scout.offline.OfflineTopComponent;
 import com.iontorrent.utils.LookupUtils;
 import com.iontorrent.utils.SystemTool;
@@ -114,7 +119,7 @@ persistenceType = TopComponent.PERSISTENCE_ALWAYS)
 @ActionReference(path = "Menu/Window" /*, position = 333 */)
 @TopComponent.OpenActionRegistration(displayName = "#CTL_ExperimentViewerAction",
 preferredID = "ExperimentViewerTopComponent")
-public final class ExperimentViewerTopComponent extends TopComponent implements ExplorerManager.Provider,
+public final class ExperimentViewerTopComponent extends TopComponent implements ExplorerManager.Provider, TableListener,
         TaskListener, ExperimentLoader {
 
     private static ExplorerManager explorermanager = new ExplorerManager();
@@ -140,6 +145,8 @@ public final class ExperimentViewerTopComponent extends TopComponent implements 
     private String run_name;
     private FindRunName findtask;
     CompositeExperiment comp;
+    private TablePanel q17basestable;
+    private TablePanel q17maxtable;
 
     public ExperimentViewerTopComponent() {
         initComponents();
@@ -173,8 +180,7 @@ public final class ExperimentViewerTopComponent extends TopComponent implements 
                                 dataClassContent.remove(oldresult);
                             }
                             oldresult = beannode.getResult();
-                            lblExp.setText(oldresult.getChipType() + ": " + oldresult.getExperimentName());
-                            lblRes.setText(oldresult.getResultsName());
+
                             update(oldresult);
                             // create new experiment context
 
@@ -193,18 +199,18 @@ public final class ExperimentViewerTopComponent extends TopComponent implements 
 
                         } else if (n instanceof BeanNode) {
                             BeanNode node = (BeanNode) n;
-                            if (node.getDisplayName().equalsIgnoreCase("Thumbnails")) {
-                                p("Got thumbnails node");
-                                ResultNode res = (ResultNode) node.getParentNode();
-                                oldresult = res.getResult();
-                                lblExp.setText(oldresult.getChipType() + ": " + oldresult.getExperimentName());
-                                lblRes.setText(oldresult.getResultsName());
-                                update(oldresult);
-                                if (comp != null) {
-                                    exp = comp.getThumbnailsContext(false);
-                                    p("Got thumbnails context: " + exp);
-                                }
-                            }
+//                            if (node.getDisplayName().equalsIgnoreCase("Thumbnails")) {
+//                                p("Got thumbnails node");
+//                                ResultNode res = (ResultNode) node.getParentNode();
+//                                oldresult = res.getResult();
+//                                lblExp.setText(oldresult.getChipType() + ": " + oldresult.getExperimentName());
+//                                lblRes.setText(oldresult.getResultsName());
+//                                update(oldresult);
+//                                if (comp != null) {
+//                                    exp = comp.getContext(0);
+//                                    p("Got first block: " + exp);
+//                                }
+//                            }
                         }
                     }
                 }
@@ -228,40 +234,82 @@ public final class ExperimentViewerTopComponent extends TopComponent implements 
             dirs = dirs.replace(" ", "<br>");
             GuiUtils.showNonModelMsg("Locating data (Checking multiple drives...)", "<html>Checking:<br>" + dirs + "</html>", true, 50);
         }
-        p("First clear all old experimental data!");
+        //  p("First clear all old experimental data!");
         clearOldData(exp);
 
         context.setExperimentContext(exp, true);
         if (!arePathsForExpOk()) {
             return false;
         }
-        p("Checking for composite experiment: " + exp.getChipType());
+        p("Result path is now: " + exp.getResultsDirectory());
+        if (exp.isThumbnails()) {
+            exp.setThumbnailsRaw();
+        }
+        p("Checking for Proton: " + exp.getChipType());
         if (exp.isChipBB() && !exp.isThumbnails() && !exp.isBlock()) {
             p("Composite: parsing blocks");
             comp = new CompositeExperiment(exp);
             comp.maybParseBlocks();
-            p("Got blocks: " + comp.getBlocks());
+            //  p("Got blocks: " + comp.getBlocks());
             p("Publishing CompositeExperiment");
             LookupUtils.publish(compContent, comp);
             // check for thumbnails            
-            TopComponent tc = (TopComponent) WindowManager.getDefault().findTopComponent("TorrentScoutCompositeViewTopComponent");
-            GuiUtils.showNonModalMsg("Loading whole image view for " + exp.getResultsDirectory());
-            if (tc != null) {
-                tc.requestActive();
-                tc.requestVisible();
-                tc.requestAttention(true);
-            }
-//            if (!exp.isThumbnails())  {
-//                exp = comp.getThumbnailsContext();
-//                context.setExperimentContext(exp, false);
-//            }
 
         }
         if (exp != null) {
             justPublishExp(exp);
         }
-
+        afterExperimentOpened(exp);
         return false;
+    }
+
+    public static void afterExperimentOpened(ExperimentContext exp) {
+        TopComponent tc = null;
+        if (exp.doesExplogHaveBlocks()) {
+            tc = (TopComponent) WindowManager.getDefault().findTopComponent("TorrentScoutCompositeViewTopComponent");
+        } else {
+            if (exp.hasBam()) {
+                tc = (TopComponent) WindowManager.getDefault().findTopComponent("TorrentScoutMaskViewTopComponent");
+            } else {
+                tc = (TopComponent) WindowManager.getDefault().findTopComponent("WholeChipViewTopComponent");
+            }
+
+        }
+        openComponent(tc, true);
+    }
+
+    protected static void openComponent(TopComponent tc, boolean attention) {
+        if (tc != null) {
+            if (!tc.isOpened()) {
+                tc.open();
+            }
+            tc.requestActive();
+            tc.requestVisible();
+            tc.toFront();
+            if (attention) {
+                tc.requestAttention(true);
+            }
+        }
+    }
+
+    protected void pickSite() throws HeadlessException {
+        // OptionsDisplayer.getDefault().open("TorrentScoutOptions/TorrentScoutSettings");
+
+        SiteList pan = new SiteList();
+        int ans = JOptionPane.showConfirmDialog(this, pan, "Pick a site", JOptionPane.OK_CANCEL_OPTION);
+        if (ans == JOptionPane.OK_OPTION) {
+            String site = pan.getSelectedValue().getKey();
+
+            if (context == null) {
+                context = GlobalContext.getContext();
+            }
+            context.setContext(site);
+
+            setStatus("Selecting  " + context.getDbUrl() + "/" + FolderManager.getManager().getRule() + ": " + FolderManager.getManager().getDbUrl());
+            this.txtUrl.setText(context.getDbUrl());
+            this.URL = context.getDbUrl();
+            loadDataFromDb(false);
+        }
     }
 
     protected void removeEmptyNodes(Children pgms) {
@@ -285,7 +333,7 @@ public final class ExperimentViewerTopComponent extends TopComponent implements 
                         rm[0] = exper;
                         exp.remove(rm);
                     } else {
-                       // p(exper.getDisplayName() + " has " + exper.getChildren().getNodesCount() + " results");
+                        // p(exper.getDisplayName() + " has " + exper.getChildren().getNodesCount() + " results");
                     }
                 }
                 if (pgm.isLeaf() || pgm.getChildren().getNodesCount() < 1) {
@@ -330,9 +378,13 @@ public final class ExperimentViewerTopComponent extends TopComponent implements 
             if (ans == 0) { //edit
                 OfflineTopComponent tc = (OfflineTopComponent) WindowManager.getDefault().findTopComponent("OfflineTopComponent");
                 if (tc != null) {
+                    if (!tc.isOpened()) {
+                        tc.open();
+                    }
                     tc.setExperimentContext(context.getExperimentContext());
                     tc.requestActive();
                     tc.requestVisible();
+                    tc.toFront();
                     tc.requestAttention(true);
                 }
             } else if (ans == 2) {
@@ -354,21 +406,9 @@ public final class ExperimentViewerTopComponent extends TopComponent implements 
         TopComponent tc = null;
         // if (!exp.isBB()) {
         tc = (TopComponent) WindowManager.getDefault().findTopComponent("TorrentScoutMaskViewTopComponent");
-        GuiUtils.showNonModalMsg("ExperimentViewer: Loading data for " + exp.getRawDir());
+        GuiUtils.showNonModalMsg("Loading data for " + exp.getRawDir(), "Db Browser");
         LookupUtils.publish(loadContent, new LoadDataContext());
-//        } else {
-//            tc = (TopComponent) WindowManager.getDefault().findTopComponent("TorrentScoutCompositeViewTopComponent");
-//            if (tc == null) {
-//                //WindowManager.getDefault()
-//                JOptionPane.showMessageDialog(this, "To view black bird data, please open the Windows/Composite Experiments Window");
-//            }
-        //}
-        if (tc != null) {
-            tc.requestActive();
-            tc.requestVisible();
-            tc.requestAttention(true);
-        }
-
+        afterExperimentOpened(exp);
     }
 
     private void doHintAction() {
@@ -485,17 +525,12 @@ public final class ExperimentViewerTopComponent extends TopComponent implements 
                 }
                 URL = context.getDbUrl();
 
-                if (URL
-                        != null && URL.length()
-                        > 0) {
+                if (URL != null && URL.length() > 0) {
                     p("Got a global clontext with dir:" + URL);
                     setStatus("Got a context with db URL " + URL);
                     this.txtUrl.setText(URL);
-                    try {
-                        this.toFront();
-                    } catch (Exception e) {
-                    }
-                    loadDataFromDb();
+
+                    loadDataFromDb(false);
 
                 } else {
                     // showOfflineComponent();
@@ -510,7 +545,9 @@ public final class ExperimentViewerTopComponent extends TopComponent implements 
             public void run() {
                 TopComponent tc = (TopComponent) WindowManager.getDefault().findTopComponent("OfflineTopComponent");
                 if (tc != null) {
+
                     tc.requestActive();
+                    tc.toFront();
                     tc.requestVisible();
                 }
             }
@@ -562,7 +599,7 @@ public final class ExperimentViewerTopComponent extends TopComponent implements 
                 map.remove(rig.getName().toLowerCase());
             }
         }
-        createTreeModelFromData();
+
         return true;
     }
 
@@ -572,6 +609,8 @@ public final class ExperimentViewerTopComponent extends TopComponent implements 
             context = GlobalContext.getContext();
         }
 
+        lblExp.setText(result.getChipType() + ": " + result.getExperimentName());
+        lblRes.setText(result.getResultsName());
         exp = result.createContext();
 
         if (result.isCompleted()) {
@@ -622,7 +661,6 @@ public final class ExperimentViewerTopComponent extends TopComponent implements 
         AbstractNode rootnode = new RootNode(pgms);
         explorermanager.setRootContext(rootnode);
         explorermanager.getRootContext().setDisplayName("Experiments from " + this.URL);
-
 
 
         if (myrigs != null && myrigs.size() > 0 && experiments != null && explorermanager.getRootContext() != null) {
@@ -746,14 +784,20 @@ public final class ExperimentViewerTopComponent extends TopComponent implements 
         task.execute();
     }
 
-    private void loadDataFromDb() {
+    private void loadDataFromDb(boolean pick) {
         //loadDataFromRest();
         if (this.context == null) {
             return;
         }
         URL = context.getDbUrl();
         if (URL == null || URL.trim().length() < 1) {
-            showOfflineComponent();
+            p("Got no url");
+            if (pick) {
+                pickSite();
+            } else {
+                showOfflineComponent();
+            }
+
             return;
         }
 
@@ -812,7 +856,8 @@ public final class ExperimentViewerTopComponent extends TopComponent implements 
             //   p("calling aftergotdb context");
             afterGotDbContext();
         } else if (t instanceof DbLoadTask) {
-            //  p("calling createtreemodel from data");
+            buildTreeFromRigsAndExperiments(experiments);
+            createFilteredResultListsAndTablePanels();
             createTreeModelFromData();
         } else if (t instanceof CreateIndexTask) {
             maybeLoadExperiment(exp);
@@ -850,7 +895,10 @@ public final class ExperimentViewerTopComponent extends TopComponent implements 
         this.setStatus("Loading data from REST " + URL);
         ExperimentRestClientAdapter client = new ExperimentRestClientAdapter(URL);
         ArrayList<RundbExperiment> experiments = client.getExperiments();
+
         buildTreeFromRigsAndExperiments(experiments);
+        createFilteredResultListsAndTablePanels();
+        createTreeModelFromData();
     }
 
     private void loadDataAfterGotContext() {
@@ -861,9 +909,54 @@ public final class ExperimentViewerTopComponent extends TopComponent implements 
         query = entityManager.createQuery("SELECT c FROM RundbReportstorage c");
         storages = query.getResultList();
 
+    }
 
-        buildTreeFromRigsAndExperiments(experiments);
+    private void createFilteredResultListsAndTablePanels() {
 
+        ArrayList<MyResult> lastresults = MyRig.getListOfResults(myrigs);
+        long topq17bases = MyResult.getTopQ17Bases(lastresults, 30);
+        long topq17max = MyResult.getTopQ17MaxReadLen(lastresults, 30);
+
+        ArrayList<MyResult> q17bases = createFilteredResultLists(new Q17BasesNodeFilter(topq17bases));
+        ArrayList<MyResult> q17max = createFilteredResultLists(new Q17MaxLenNodeFilter(topq17max));
+
+        p("createFilteredResultListsAndTablePanels:" + topq17bases + "/" + topq17max);
+        p("nr results:" + q17bases.size() + "/" + q17max.size());
+
+        if (q17basestable == null) {
+            q17basestable = new TablePanel(this);
+            q17maxtable = new TablePanel(this);
+            tab.setComponentAt(1, q17basestable);
+            tab.setComponentAt(2, q17maxtable);
+        }
+        q17basestable.updateTableModel(q17bases);
+        q17maxtable.updateTableModel(q17max);
+    }
+
+    @Override
+    public void rowSelected(Object sel) {
+        if (sel == null || !(sel instanceof MyResult)) {
+            return;
+        }
+        MyResult res = (MyResult) sel;
+        p("Got selected row: " + res);
+        update(res);
+
+    }
+
+    private ArrayList<MyResult> createFilteredResultLists(NodeFilter filter) {
+        ArrayList<MyResult> results = new ArrayList<MyResult>();
+        for (MyRig rig : myrigs) {
+            for (RundbExperiment exp : rig.getExperiments()) {
+                for (RundbResults res : exp.getRundbResultsCollection()) {
+                    MyResult myres = new MyResult(res, rig);
+                    if (filter.passes(myres)) {
+                        results.add(myres);
+                    }
+                }
+            }
+        }
+        return results;
     }
 
     public void resultChanged(LookupEvent lookupEvent) {
@@ -1070,7 +1163,6 @@ public final class ExperimentViewerTopComponent extends TopComponent implements 
 
         jButton2 = new javax.swing.JButton();
         jButton3 = new javax.swing.JButton();
-        beanTreeView1 = new org.openide.explorer.view.BeanTreeView();
         jPanel1 = new javax.swing.JPanel();
         jLabel3 = new javax.swing.JLabel();
         jLabel2 = new javax.swing.JLabel();
@@ -1082,21 +1174,23 @@ public final class ExperimentViewerTopComponent extends TopComponent implements 
         btnLoadFavorite = new javax.swing.JButton();
         hint1 = new javax.swing.JButton();
         jButton4 = new javax.swing.JButton();
+        jPanel2 = new javax.swing.JPanel();
         btnView = new javax.swing.JButton();
-        hint = new javax.swing.JButton();
         jToolBar1 = new javax.swing.JToolBar();
         jButton1 = new javax.swing.JButton();
         jLabel1 = new javax.swing.JLabel();
         txtUrl = new javax.swing.JTextField();
         btnReload = new javax.swing.JButton();
+        tab = new javax.swing.JTabbedPane();
+        beanTreeView1 = new org.openide.explorer.view.BeanTreeView();
+        jLabel4 = new javax.swing.JLabel();
+        jLabel5 = new javax.swing.JLabel();
 
         org.openide.awt.Mnemonics.setLocalizedText(jButton2, org.openide.util.NbBundle.getMessage(ExperimentViewerTopComponent.class, "ExperimentViewerTopComponent.jButton2.text")); // NOI18N
 
         org.openide.awt.Mnemonics.setLocalizedText(jButton3, org.openide.util.NbBundle.getMessage(ExperimentViewerTopComponent.class, "ExperimentViewerTopComponent.jButton3.text")); // NOI18N
 
         setBackground(java.awt.Color.white);
-
-        beanTreeView1.setBackground(new java.awt.Color(255, 255, 255));
 
         jPanel1.setOpaque(false);
 
@@ -1170,13 +1264,29 @@ public final class ExperimentViewerTopComponent extends TopComponent implements 
         });
         jToolBar2.add(jButton4);
 
-        btnView.setFont(new java.awt.Font("Tahoma", 1, 12)); // NOI18N
+        jPanel2.setMaximumSize(new java.awt.Dimension(10, 20));
+        jPanel2.setMinimumSize(new java.awt.Dimension(10, 20));
+
+        javax.swing.GroupLayout jPanel2Layout = new javax.swing.GroupLayout(jPanel2);
+        jPanel2.setLayout(jPanel2Layout);
+        jPanel2Layout.setHorizontalGroup(
+            jPanel2Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGap(0, 10, Short.MAX_VALUE)
+        );
+        jPanel2Layout.setVerticalGroup(
+            jPanel2Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGap(0, 20, Short.MAX_VALUE)
+        );
+
+        jToolBar2.add(jPanel2);
+
+        btnView.setFont(new java.awt.Font("Tahoma", 1, 12));
         btnView.setForeground(new java.awt.Color(0, 153, 51));
         org.openide.awt.Mnemonics.setLocalizedText(btnView, org.openide.util.NbBundle.getMessage(ExperimentViewerTopComponent.class, "ExperimentViewerTopComponent.btnView.text")); // NOI18N
         btnView.setBorder(javax.swing.BorderFactory.createBevelBorder(javax.swing.border.BevelBorder.RAISED));
-        btnView.setMaximumSize(new java.awt.Dimension(99, 21));
-        btnView.setMinimumSize(new java.awt.Dimension(99, 21));
-        btnView.setPreferredSize(new java.awt.Dimension(99, 21));
+        btnView.setMaximumSize(new java.awt.Dimension(150, 21));
+        btnView.setMinimumSize(new java.awt.Dimension(120, 21));
+        btnView.setPreferredSize(new java.awt.Dimension(120, 21));
         btnView.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
                 btnViewActionPerformed(evt);
@@ -1198,8 +1308,8 @@ public final class ExperimentViewerTopComponent extends TopComponent implements 
                         .addComponent(jLabel2)
                         .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                         .addComponent(lblExp, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)))
-                .addContainerGap(30, Short.MAX_VALUE))
-            .addComponent(jToolBar2, javax.swing.GroupLayout.DEFAULT_SIZE, 350, Short.MAX_VALUE)
+                .addContainerGap(99, Short.MAX_VALUE))
+            .addComponent(jToolBar2, javax.swing.GroupLayout.DEFAULT_SIZE, 419, Short.MAX_VALUE)
         );
         jPanel1Layout.setVerticalGroup(
             jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
@@ -1215,18 +1325,6 @@ public final class ExperimentViewerTopComponent extends TopComponent implements 
                 .addComponent(jToolBar2, javax.swing.GroupLayout.PREFERRED_SIZE, 25, Short.MAX_VALUE)
                 .addContainerGap())
         );
-
-        org.openide.awt.Mnemonics.setLocalizedText(hint, org.openide.util.NbBundle.getMessage(ExperimentViewerTopComponent.class, "ExperimentViewerTopComponent.hint.text")); // NOI18N
-        hint.setToolTipText(org.openide.util.NbBundle.getMessage(ExperimentViewerTopComponent.class, "ExperimentViewerTopComponent.hint.toolTipText")); // NOI18N
-        hint.setFocusable(false);
-        hint.setHorizontalTextPosition(javax.swing.SwingConstants.CENTER);
-        hint.setMargin(new java.awt.Insets(0, 0, 0, 0));
-        hint.setVerticalTextPosition(javax.swing.SwingConstants.BOTTOM);
-        hint.addActionListener(new java.awt.event.ActionListener() {
-            public void actionPerformed(java.awt.event.ActionEvent evt) {
-                hintActionPerformed(evt);
-            }
-        });
 
         jToolBar1.setRollover(true);
         jToolBar1.setOpaque(false);
@@ -1269,18 +1367,22 @@ public final class ExperimentViewerTopComponent extends TopComponent implements 
         });
         jToolBar1.add(btnReload);
 
+        beanTreeView1.setBackground(new java.awt.Color(255, 255, 255));
+        tab.addTab(org.openide.util.NbBundle.getMessage(ExperimentViewerTopComponent.class, "ExperimentViewerTopComponent.beanTreeView1.TabConstraints.tabTitle"), beanTreeView1); // NOI18N
+
+        org.openide.awt.Mnemonics.setLocalizedText(jLabel4, org.openide.util.NbBundle.getMessage(ExperimentViewerTopComponent.class, "ExperimentViewerTopComponent.jLabel4.text")); // NOI18N
+        tab.addTab(org.openide.util.NbBundle.getMessage(ExperimentViewerTopComponent.class, "ExperimentViewerTopComponent.jLabel4.TabConstraints.tabTitle"), jLabel4); // NOI18N
+
+        org.openide.awt.Mnemonics.setLocalizedText(jLabel5, org.openide.util.NbBundle.getMessage(ExperimentViewerTopComponent.class, "ExperimentViewerTopComponent.jLabel5.text")); // NOI18N
+        tab.addTab(org.openide.util.NbBundle.getMessage(ExperimentViewerTopComponent.class, "ExperimentViewerTopComponent.jLabel5.TabConstraints.tabTitle"), jLabel5); // NOI18N
+
         javax.swing.GroupLayout layout = new javax.swing.GroupLayout(this);
         this.setLayout(layout);
         layout.setHorizontalGroup(
             layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addComponent(jToolBar1, javax.swing.GroupLayout.DEFAULT_SIZE, 350, Short.MAX_VALUE)
+            .addComponent(jToolBar1, javax.swing.GroupLayout.DEFAULT_SIZE, 419, Short.MAX_VALUE)
             .addComponent(jPanel1, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-            .addComponent(beanTreeView1, javax.swing.GroupLayout.DEFAULT_SIZE, 350, Short.MAX_VALUE)
-            .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                .addGroup(layout.createSequentialGroup()
-                    .addGap(0, 165, Short.MAX_VALUE)
-                    .addComponent(hint, javax.swing.GroupLayout.PREFERRED_SIZE, 21, javax.swing.GroupLayout.PREFERRED_SIZE)
-                    .addGap(0, 164, Short.MAX_VALUE)))
+            .addComponent(tab, javax.swing.GroupLayout.DEFAULT_SIZE, 419, Short.MAX_VALUE)
         );
         layout.setVerticalGroup(
             layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
@@ -1289,12 +1391,7 @@ public final class ExperimentViewerTopComponent extends TopComponent implements 
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                 .addComponent(jPanel1, javax.swing.GroupLayout.PREFERRED_SIZE, 64, javax.swing.GroupLayout.PREFERRED_SIZE)
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                .addComponent(beanTreeView1, javax.swing.GroupLayout.DEFAULT_SIZE, 623, Short.MAX_VALUE))
-            .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                .addGroup(layout.createSequentialGroup()
-                    .addGap(0, 351, Short.MAX_VALUE)
-                    .addComponent(hint, javax.swing.GroupLayout.PREFERRED_SIZE, 21, javax.swing.GroupLayout.PREFERRED_SIZE)
-                    .addGap(0, 352, Short.MAX_VALUE)))
+                .addComponent(tab, javax.swing.GroupLayout.DEFAULT_SIZE, 623, Short.MAX_VALUE))
         );
     }// </editor-fold>//GEN-END:initComponents
 
@@ -1304,16 +1401,15 @@ public final class ExperimentViewerTopComponent extends TopComponent implements 
         context.setDbUrl(URL);
         Preferences pref = NbPreferences.forModule(ExperimentViewerTopComponent.class);
         if (URL != null && old != null && !old.equalsIgnoreCase(URL)) {
-            loadDataFromDb();
+            loadDataFromDb(false);
         } else if (old == null && URL != null) {
-            loadDataFromDb();
+            loadDataFromDb(false);
         }
     }//GEN-LAST:event_txtUrlActionPerformed
 
     private void btnReloadActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnReloadActionPerformed
         URL = txtUrl.getText();
-
-        loadDataFromDb();
+        loadDataFromDb(false);
     }//GEN-LAST:event_btnReloadActionPerformed
 
     private void btnFilterActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnFilterActionPerformed
@@ -1332,21 +1428,8 @@ public final class ExperimentViewerTopComponent extends TopComponent implements 
     }//GEN-LAST:event_btnFilterActionPerformed
 
     private void jButton1ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton1ActionPerformed
-        SiteList pan = new SiteList();
-        int ans = JOptionPane.showConfirmDialog(this, pan, "Pick a site", JOptionPane.OK_CANCEL_OPTION);
-        if (ans == JOptionPane.OK_OPTION) {
-            String site = pan.getSelectedValue().getKey();
+        pickSite();
 
-            if (context == null) {
-                context = GlobalContext.getContext();
-            }
-            context.setContext(site);
-
-            setStatus("Selecting site " + site + "/" + FolderManager.getManager().getRule() + ": " + FolderManager.getManager().getDbUrl());
-            this.txtUrl.setText(context.getDbUrl());
-            this.URL = context.getDbUrl();
-            loadDataFromDb();
-        }
     }//GEN-LAST:event_jButton1ActionPerformed
 
     private void btnViewActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnViewActionPerformed
@@ -1372,9 +1455,6 @@ public final class ExperimentViewerTopComponent extends TopComponent implements 
             findAndLoadResult(resname);
         }
     }//GEN-LAST:event_btnLoadFavoriteActionPerformed
-
-    private void hintActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_hintActionPerformed
-    }//GEN-LAST:event_hintActionPerformed
 
     private void hint1ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_hint1ActionPerformed
 
@@ -1438,7 +1518,6 @@ public final class ExperimentViewerTopComponent extends TopComponent implements 
     private javax.swing.JButton btnLoadFavorite;
     private javax.swing.JButton btnReload;
     private javax.swing.JButton btnView;
-    private javax.swing.JButton hint;
     private javax.swing.JButton hint1;
     private javax.swing.JButton jButton1;
     private javax.swing.JButton jButton2;
@@ -1447,11 +1526,15 @@ public final class ExperimentViewerTopComponent extends TopComponent implements 
     private javax.swing.JLabel jLabel1;
     private javax.swing.JLabel jLabel2;
     private javax.swing.JLabel jLabel3;
+    private javax.swing.JLabel jLabel4;
+    private javax.swing.JLabel jLabel5;
     private javax.swing.JPanel jPanel1;
+    private javax.swing.JPanel jPanel2;
     private javax.swing.JToolBar jToolBar1;
     private javax.swing.JToolBar jToolBar2;
     private javax.swing.JLabel lblExp;
     private javax.swing.JLabel lblRes;
+    private javax.swing.JTabbedPane tab;
     private javax.swing.JTextField txtUrl;
     // End of variables declaration//GEN-END:variables
 
@@ -1462,19 +1545,18 @@ public final class ExperimentViewerTopComponent extends TopComponent implements 
 
         if (context == null || context.getDbUrl() == null || context.getDbUrl().length() < 1) {
             String default_rule = FolderManager.setDefaultRule();
-            if (default_rule == null) {
-                // OptionsDisplayer.getDefault().open("TorrentScoutOptions/TorrentScoutSettings");
+            if (default_rule == null || default_rule.length() < 1) {
+                OptionsDisplayer.getDefault().open("TorrentScoutOptions/TorrentScoutSettings");
                 return;
+            } else {
+                p("Got no db url. Rule is: " + default_rule);
+
             }
         } else {
             p("Got db url: " + context.getDbUrl());
         }
-        try {
-            this.toFront();
 
-        } catch (Exception e) {
-        }
-        loadDataFromDb();
+        loadDataFromDb(true);
     }
 
     @Override
